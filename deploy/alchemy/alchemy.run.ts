@@ -162,7 +162,7 @@ const optionalSecret = (name: string) =>
   Config.redacted(name).pipe(Config.withDefault(Redacted.make("")));
 
 const accessScopeHint =
-  " (if this is a permissions error, re-run `pnpm alchemy login --configure`, answer yes to “Customize OAuth scopes?”, and select access:write alongside the defaults)";
+  " (if this is a permissions error, re-run `pnpm alchemy login deploy/alchemy/alchemy.run.ts --configure`, answer yes to “Customize OAuth scopes?”, and select access:write alongside the defaults)";
 
 /**
  * Self-host auth (AUTH_MODE=cloudflare_access): derive the Access values
