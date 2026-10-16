@@ -15,6 +15,10 @@ import { QueryState } from "@/client/components/QueryState";
 import { SkeletonCard } from "@/client/components/SkeletonPresets";
 import { Alert, AlertDescription } from "@/client/components/ui/alert";
 import { useHostedPlanGate } from "@/client/features/billing/HostedPlanGate";
+import {
+  ProjectDataforseoRefusal,
+  projectDataforseoRefusalCode,
+} from "@/client/features/projects/ProjectDataforseoRefusal";
 import { captureClientEvent } from "@/client/lib/posthog";
 import { FreePlanAlert } from "./FreePlanAlert";
 import { ScheduledChecksPausedAlert } from "./ScheduledChecksPausedAlert";
@@ -126,6 +130,7 @@ export function RankTrackingDomainDetail({
   const resultsData = resultsQuery.data;
 
   const latestRun = useRankRunPolling(projectId, config.id);
+  const projectRefusal = projectDataforseoRefusalCode(config.lastSkipReason);
 
   // Also feeds the History toggle: the matrix view only earns its tab once
   // there are two checks to compare.
@@ -248,7 +253,24 @@ export function RankTrackingDomainDetail({
         </Alert>
       )}
 
-      <RankRunAlerts run={latestRun} />
+      {/* The project's reason stands in for the last run's own alert, which
+          would blame the search data provider for the keywords it skipped. */}
+      {projectRefusal ? (
+        <Alert variant="warning">
+          <AlertTriangle />
+          <AlertDescription className="text-foreground">
+            <p>
+              <span className="font-medium">Last check stopped.</span>{" "}
+              <ProjectDataforseoRefusal
+                projectId={projectId}
+                code={projectRefusal}
+              />
+            </p>
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <RankRunAlerts run={latestRun} />
+      )}
 
       <FreePlanAlert visible={planStatus === "free"} />
 

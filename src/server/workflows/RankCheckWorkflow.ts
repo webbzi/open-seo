@@ -7,6 +7,7 @@ import { NonRetryableError } from "cloudflare:workflows";
 import { withPgClient } from "@/db";
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
 import { failRunIfActive } from "@/server/features/rank-tracking/services/rankCheckRunGuards";
+import { projectDataforseoRefusal } from "@/server/features/projects/services/projectDataforseoPrecheck";
 import {
   runLiveCheck,
   runQueuedCheck,
@@ -14,11 +15,15 @@ import {
 } from "@/server/workflows/rankCheckPaths";
 import { pgStep } from "@/server/workflows/pgStep";
 import {
+  stepProjectRefusal,
+  type ProjectRefusalCode,
+} from "@/server/workflows/projectRefusal";
+import {
   createDataforseoClient,
   type ProjectBillingCustomer,
 } from "@/server/lib/dataforseo";
 import { captureServerEvent } from "@/server/lib/posthog";
-import { AppError } from "@/server/lib/errors";
+import { AppError, asAppError } from "@/server/lib/errors";
 import { autumn } from "@/server/billing/autumn";
 import {
   AUTUMN_SEO_DATA_BALANCE_FEATURE_ID,
@@ -27,6 +32,7 @@ import {
 import {
   estimateRankCheckCredits,
   rankCheckCostApprovalError,
+  type RankTrackingSkipReason,
 } from "@/shared/rank-tracking";
 import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
 
@@ -34,6 +40,11 @@ const SINGLE_ATTEMPT_STEP_CONFIG = {
   retries: { limit: 0, delay: "1 second" as const },
   timeout: "2 minutes" as const,
 };
+
+const PROJECT_REFUSAL_SKIP_REASONS = {
+  PROJECT_BUDGET_EXCEEDED: "project_budget_exceeded",
+  PROJECT_DATAFORSEO_PAUSED: "project_dataforseo_paused",
+} as const satisfies Record<ProjectRefusalCode, RankTrackingSkipReason>;
 
 interface RankCheckParams {
   runId: string;
@@ -123,6 +134,14 @@ async function prepareRankCheckKeywords(input: {
         "Insufficient credits for rank check",
       );
     }
+  } else {
+    // Self-hosted: skip with the project's reason when its DataForSEO budget
+    // would refuse every call anyway.
+    const refusal = await projectDataforseoRefusal(
+      input.billingCustomer.organizationId,
+      input.billingCustomer.projectId,
+    );
+    if (refusal) throw refusal;
   }
 
   await RankTrackingRepository.updateRun(input.runId, {
@@ -146,6 +165,7 @@ async function finalizeRankCheckRun(input: {
   devices: RankCheckParams["devices"];
   batchError: string | null;
   queueStats: QueuedCheckStats | null;
+  refusal: ProjectRefusalCode | null;
 }) {
   // If stale-cleanup already marked our run failed, don't overwrite that
   // decision with a completed status — a replacement run may already be
@@ -184,7 +204,8 @@ async function finalizeRankCheckRun(input: {
 
   // Batch steps record the first per-keyword rejection on the run as it
   // happens, so a failed run shows the vendor's reason rather than a count.
-  const keywordError = run.errorMessage ?? input.batchError;
+  // A refused task post records nothing there, so its code fills in.
+  const keywordError = run.errorMessage ?? input.batchError ?? input.refusal;
   const status =
     keywordsChecked === 0 && keywordsTotal > 0 ? "failed" : "completed";
   const checkedSummary =
@@ -209,14 +230,22 @@ async function finalizeRankCheckRun(input: {
     errorMessage,
   });
 
-  // Clear any previous skip reason on success. A failed run must not advance
-  // lastCheckedAt — nothing was actually checked.
+  // Clear any previous skip reason on success, unless the project's budget
+  // stopped this run partway. A failed run must not advance lastCheckedAt —
+  // nothing was actually checked.
   // Note: nextCheckAt is NOT set here — the cron handler advances it eagerly
   // before starting the workflow to prevent retry storms.
+  const lastSkipReason = input.refusal
+    ? PROJECT_REFUSAL_SKIP_REASONS[input.refusal]
+    : null;
   if (status === "completed") {
     await RankTrackingRepository.updateConfig(input.configId, input.projectId, {
       lastCheckedAt: nowIso,
-      lastSkipReason: null,
+      lastSkipReason,
+    });
+  } else if (lastSkipReason) {
+    await RankTrackingRepository.updateConfig(input.configId, input.projectId, {
+      lastSkipReason,
     });
   }
 
@@ -266,12 +295,15 @@ async function markRankCheckRunFailed(input: {
   await failRunIfActive(input.runId, errorMessage);
 
   // Flag the config so the UI can show why the scheduled check was skipped
-  const isInsufficientCredits =
-    input.error instanceof AppError &&
-    input.error.code === "INSUFFICIENT_CREDITS";
-  if (isInsufficientCredits) {
+  const refusal = stepProjectRefusal(input.error);
+  const lastSkipReason: RankTrackingSkipReason | null = refusal
+    ? PROJECT_REFUSAL_SKIP_REASONS[refusal]
+    : asAppError(input.error)?.code === "INSUFFICIENT_CREDITS"
+      ? "insufficient_credits"
+      : null;
+  if (lastSkipReason) {
     await RankTrackingRepository.updateConfig(input.configId, input.projectId, {
-      lastSkipReason: "insufficient_credits",
+      lastSkipReason,
     });
   }
 
@@ -365,6 +397,7 @@ export class RankCheckWorkflow extends WorkflowEntrypoint<
 
       let batchError: string | null = null;
       let queueStats: QueuedCheckStats | null = null;
+      let refusal: ProjectRefusalCode | null = null;
 
       try {
         const checkContext = {
@@ -381,10 +414,10 @@ export class RankCheckWorkflow extends WorkflowEntrypoint<
         // Scheduled checks use DataForSEO's task queue (~30% of live cost);
         // manual checks stay on the live endpoint for instant results, and
         // only the pairs the live endpoint missed go to the queue.
-        queueStats =
+        ({ queueStats, refusal } =
           trigger === "scheduled"
             ? await runQueuedCheck(step, checkContext)
-            : await runLiveCheck(step, checkContext);
+            : await runLiveCheck(step, checkContext));
       } catch (error) {
         // Batch failure — snapshots for completed batches are already
         // persisted incrementally. Continue to finalization.
@@ -402,10 +435,13 @@ export class RankCheckWorkflow extends WorkflowEntrypoint<
           devices,
           batchError,
           queueStats,
+          refusal,
         }),
       );
     } catch (error) {
-      console.error(`Rank check ${runId} failed:`, error);
+      const refusal = stepProjectRefusal(error);
+      if (refusal) console.info(`[rank-check] ${runId} skipped: ${refusal}`);
+      else console.error(`Rank check ${runId} failed:`, error);
       await pgStep(step, "mark-failed", SINGLE_ATTEMPT_STEP_CONFIG, async () =>
         markRankCheckRunFailed({
           runId,

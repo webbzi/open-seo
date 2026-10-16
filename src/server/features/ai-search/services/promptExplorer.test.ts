@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getCached, setCached, buildCacheKey } from "@/server/lib/r2-cache";
 import { promptExplorerInputSchema } from "@/types/schemas/ai-search";
 import type { LlmResponseResult } from "@/server/lib/dataforseoLlmSchemas";
+import { AppError } from "@/server/lib/errors";
 import { explorePrompt, extractCitations } from "./promptExplorer";
 
 vi.mock("cloudflare:workers", () => ({ waitUntil: vi.fn() }));
@@ -147,6 +148,16 @@ describe("explorePrompt web-search retry", () => {
       status: "success",
       webSearch: false,
       text: "answer",
+    });
+  });
+
+  it("surfaces a project DataForSEO refusal instead of an unavailable model", async () => {
+    llmResponse.mockRejectedValueOnce(
+      new AppError("PROJECT_DATAFORSEO_PAUSED"),
+    );
+
+    await expect(explorePrompt(input, billing)).rejects.toMatchObject({
+      code: "PROJECT_DATAFORSEO_PAUSED",
     });
   });
 });

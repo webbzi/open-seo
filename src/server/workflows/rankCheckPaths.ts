@@ -10,10 +10,15 @@ import type {
   RankCheckResult,
   RankCheckTaskInput,
 } from "@/server/lib/dataforseo";
+import { isProjectDataforseoRefusal } from "@/server/lib/dataforseo/projectBudgetRefusal";
 import { AppError } from "@/server/lib/errors";
 import type { RankTrackingConfig } from "@/types/schemas/rank-tracking";
 import { KEYWORDS_PER_BATCH } from "@/shared/rank-tracking";
 import { pgStep } from "@/server/workflows/pgStep";
+import {
+  stepProjectRefusal,
+  type ProjectRefusalCode,
+} from "@/server/workflows/projectRefusal";
 
 const SINGLE_ATTEMPT_STEP_CONFIG = {
   retries: { limit: 0, delay: "1 second" as const },
@@ -79,7 +84,9 @@ function expandToTaskInputs(
  * Check keyword/device pairs against the live endpoint and persist snapshots.
  * The batch is billed with one credit hold and one settle. Per-call failures
  * are logged and skipped; if the hold itself fails, no call runs and every
- * pair fails with that error. Returns the snapshot count written.
+ * pair fails with that error. Returns the snapshot count written. A call the
+ * project's DataForSEO budget refused makes the step throw that refusal once
+ * the rest is saved, so the caller stops issuing paid calls.
  */
 async function checkBatchLive(
   ctx: CheckContext,
@@ -104,12 +111,18 @@ async function checkBatchLive(
   }
   const results: RankCheckResultWithDevice[] = [];
   let firstError: string | null = null;
-  settled.forEach((outcome, index) => {
+  let refusal: AppError | null = null;
+  for (const [index, outcome] of settled.entries()) {
     if (outcome.status === "fulfilled") {
       results.push({ ...outcome.value, device: tasks[index].device });
-      return;
+      continue;
     }
     const reason: unknown = outcome.reason;
+    if (isProjectDataforseoRefusal(reason)) {
+      // Not sent, so nothing to log per keyword; logged once below.
+      refusal ??= reason;
+      continue;
+    }
     const code = reason instanceof AppError ? reason.code : "UNKNOWN";
     const message = reason instanceof Error ? reason.message : String(reason);
     // Store the bare code so the app shows its provider-unavailable copy;
@@ -124,14 +137,22 @@ async function checkBatchLive(
     log(
       `[rank-check] ${ctx.runId} live call failed (${code}) keyword="${task.keyword}" device=${task.device}: ${message}`,
     );
-  });
-  if (firstError) {
-    await RankTrackingRepository.setRunErrorIfEmpty(ctx.runId, firstError);
+  }
+  // The bare refusal code, like UPSTREAM_UNAVAILABLE, gets the app's copy.
+  const runError = firstError ?? refusal?.code;
+  if (runError) {
+    await RankTrackingRepository.setRunErrorIfEmpty(ctx.runId, runError);
   }
   if (results.length > 0) {
     await RankTrackingRepository.insertSnapshots(
       mapResultsToSnapshotRows(ctx.runId, results),
     );
+  }
+  if (refusal) {
+    console.info(
+      `[rank-check] ${ctx.runId} live batch not sent: ${refusal.code}`,
+    );
+    throw refusal;
   }
   return results.length;
 }
@@ -146,13 +167,13 @@ async function checkBatchLive(
  * which retries timeouts and in-band task errors at queue price. Failed live
  * calls aren't billed, so the retry stays within the live estimate the user
  * approved. Exception: a step that died after its calls were metered gets
- * billed again at queue price. Returns the queue stats, or null when nothing
- * was missing.
+ * billed again at queue price. A project refusal ends paid work instead: no
+ * later batch and no queue fallback, since neither would be admitted.
  */
 export async function runLiveCheck(
   step: WorkflowStep,
   ctx: CheckContext,
-): Promise<QueuedCheckStats | null> {
+): Promise<RankCheckOutcome> {
   for (let i = 0; i < ctx.keywords.length; i += KEYWORDS_PER_BATCH) {
     const keywordBatch = ctx.keywords.slice(i, i + KEYWORDS_PER_BATCH);
     const batchTasks = expandToTaskInputs(keywordBatch, ctx.devices);
@@ -174,8 +195,10 @@ export async function runLiveCheck(
         },
       );
     } catch (error) {
-      // Earlier batches are already saved; this batch's pairs go to the
-      // queue below.
+      const refusal = stepProjectRefusal(error);
+      // Earlier batches are already saved and finalize counts them.
+      if (refusal) return { queueStats: null, refusal };
+      // This batch's pairs go to the queue below.
       console.warn(
         `[rank-check] ${ctx.runId} live-batch-${batchIndex} failed:`,
         error,
@@ -207,7 +230,7 @@ export async function runLiveCheck(
       );
     },
   );
-  if (missing.length === 0) return null;
+  if (missing.length === 0) return { queueStats: null, refusal: null };
 
   console.log(
     `[rank-check] ${ctx.runId} queue fallback for ${missing.length} task(s)`,
@@ -340,6 +363,15 @@ export interface QueuedCheckStats {
 }
 
 /**
+ * How a check path ended: its queue accounting (null when it never queued),
+ * and the project DataForSEO refusal that stopped its paid calls, if any.
+ */
+interface RankCheckOutcome {
+  queueStats: QueuedCheckStats | null;
+  refusal: ProjectRefusalCode | null;
+}
+
+/**
  * Check keywords via DataForSEO's standard task queue (~30% of live cost).
  * Posts every keyword/device pair (or just taskInputs) as a queued task, then
  * polls task_get for ~15 minutes, writing snapshots incrementally as tasks
@@ -347,7 +379,9 @@ export interface QueuedCheckStats {
  * DataForSEO rejected or failed — gets one shot at the live endpoint so a run
  * never hangs on a stuck queue, unless `liveFallback` is false. With
  * `saveNotFound` false, a result without the domain isn't saved. Billing
- * happens at task_post (and per live-fallback batch).
+ * happens at task_post (and per live-fallback batch). A project refusal ends
+ * paid work: no further posts and no live fallback, while tasks already posted
+ * are still collected.
  */
 export async function runQueuedCheck(
   step: WorkflowStep,
@@ -361,13 +395,14 @@ export async function runQueuedCheck(
     liveFallback?: boolean;
     saveNotFound?: boolean;
   } = {},
-): Promise<QueuedCheckStats> {
+): Promise<RankCheckOutcome & { queueStats: QueuedCheckStats }> {
   // Post all tasks to the queue, <=100 per request, one metered step each.
   // A failed chunk must not abort the run — earlier chunks were already
   // charged at DataForSEO, so their results have to be collected. The failed
   // chunk's pairs go to the live fallback instead.
   let pending: PostedRankCheckTask[] = [];
   const fallback: RankCheckTaskInput[] = [];
+  let refusal: ProjectRefusalCode | null = null;
   for (let i = 0; i < taskInputs.length; i += MAX_TASKS_PER_POST) {
     const chunk = taskInputs.slice(i, i + MAX_TASKS_PER_POST);
     const postIndex = Math.floor(i / MAX_TASKS_PER_POST);
@@ -388,6 +423,13 @@ export async function runQueuedCheck(
           }),
       );
     } catch (error) {
+      refusal = stepProjectRefusal(error);
+      if (refusal) {
+        console.info(
+          `[rank-check] ${ctx.runId} post-tasks-${postIndex} not sent: ${refusal}`,
+        );
+        break;
+      }
       console.warn(
         `[rank-check] ${ctx.runId} post-tasks-${postIndex} failed:`,
         error,
@@ -453,12 +495,12 @@ export async function runQueuedCheck(
   // Progress isn't updated here; finalize recounts keywordsChecked from the
   // DB.
   const stragglers: RankCheckTaskInput[] = [...fallback, ...pending];
-  if (stragglers.length === 0) return stats;
-  if (!liveFallback) {
+  if (stragglers.length === 0) return { queueStats: stats, refusal };
+  if (!liveFallback || refusal) {
     console.log(
       `[rank-check] ${ctx.runId} ${stragglers.length} task(s) left unchecked, no live fallback`,
     );
-    return stats;
+    return { queueStats: stats, refusal };
   }
   stats.fallbackTasks = stragglers.length;
 
@@ -470,13 +512,19 @@ export async function runQueuedCheck(
     const batch = stragglers.slice(i, i + KEYWORDS_PER_BATCH);
     const batchIndex = Math.floor(i / KEYWORDS_PER_BATCH);
 
-    stats.fallbackChecked += await pgStep(
-      step,
-      `fallback-batch-${batchIndex}`,
-      SINGLE_ATTEMPT_STEP_CONFIG,
-      () => checkBatchLive(ctx, batch),
-    );
+    try {
+      stats.fallbackChecked += await pgStep(
+        step,
+        `fallback-batch-${batchIndex}`,
+        SINGLE_ATTEMPT_STEP_CONFIG,
+        () => checkBatchLive(ctx, batch),
+      );
+    } catch (error) {
+      refusal = stepProjectRefusal(error);
+      if (!refusal) throw error;
+      break;
+    }
   }
 
-  return stats;
+  return { queueStats: stats, refusal };
 }

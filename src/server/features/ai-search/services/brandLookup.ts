@@ -10,6 +10,7 @@ import {
   CHATGPT_LOCATION_CODE,
   type LlmPlatform,
 } from "@/server/lib/dataforseo";
+import { isProjectDataforseoRefusal } from "@/server/lib/dataforseo/projectBudgetRefusal";
 import type { LlmCrossAggregatedItem } from "@/server/lib/dataforseoLlmSchemas";
 import { AppError } from "@/server/lib/errors";
 import { buildCacheKey, getCached, setCached } from "@/server/lib/r2-cache";
@@ -372,7 +373,8 @@ function rethrowIfBlockingAiSearchError(
       result.status === "rejected" &&
       result.reason instanceof AppError &&
       (result.reason.code === "INSUFFICIENT_CREDITS" ||
-        result.reason.code === "AI_SEARCH_BILLING_ISSUE")
+        result.reason.code === "AI_SEARCH_BILLING_ISSUE" ||
+        isProjectDataforseoRefusal(result.reason))
     ) {
       throw result.reason;
     }

@@ -7,6 +7,7 @@ import {
   type PostedAiTrackingTask,
 } from "@/server/lib/dataforseo";
 import { DataforseoChargedTaskError } from "@/server/lib/dataforseo/envelope";
+import { isProjectDataforseoRefusal } from "@/server/lib/dataforseo/projectBudgetRefusal";
 import { resolveLatestLlmModelName } from "@/server/lib/dataforseo/llm-models";
 import { AppError, asAppError } from "@/server/lib/errors";
 import type { ErrorCode } from "@/shared/error-codes";
@@ -139,7 +140,8 @@ function engineBatches(answers: AiLiveTask[], size: number): AiTaskBatch[] {
 
 /**
  * Posts one batch through the metered client, which bills it. Answers the
- * provider did not accept fail now; the rest are collected later.
+ * provider did not accept fail now; the rest are collected later. A project
+ * DataForSEO refusal throws, so the workflow stops its paid steps.
  */
 export async function postAiBatch(
   runId: string,
@@ -157,6 +159,7 @@ export async function postAiBatch(
       ...market,
     });
   } catch (cause) {
+    if (isProjectDataforseoRefusal(cause)) throw cause;
     error = asAppError(cause)?.code ?? "INTERNAL_ERROR";
     console.warn(`[ai-visibility] ${runId} task_post failed:`, cause);
   }
@@ -177,7 +180,9 @@ export async function postAiBatch(
 /**
  * Collects one batch of live answers through the metered client, which bills
  * them, and saves each one. An answer that DataForSEO's backend failed is
- * asked again, up to AI_ANSWER_ATTEMPTS.
+ * asked again, up to AI_ANSWER_ATTEMPTS. A project DataForSEO refusal throws
+ * with the answers it left unasked still pending, so the workflow stops its
+ * paid steps.
  */
 export async function collectAiLiveBatch(
   runId: string,
@@ -218,7 +223,10 @@ export async function collectAiLiveBatch(
   }
 }
 
-/** A call that throws becomes a failed answer that is not retried. */
+/**
+ * A call that throws becomes a failed answer that is not retried. A project
+ * refusal throws instead: the client admits the batch whole, so none was sent.
+ */
 async function fetchLiveAnswers(
   customer: ProjectBillingCustomer,
   market: AiRunMarket,
@@ -232,6 +240,12 @@ async function fetchLiveAnswers(
   } catch (error) {
     settled = tasks.map(() => ({ status: "rejected", reason: error }));
   }
+  for (const outcome of settled)
+    if (
+      outcome.status === "rejected" &&
+      isProjectDataforseoRefusal(outcome.reason)
+    )
+      throw outcome.reason;
   return settled.map((outcome) =>
     outcome.status === "fulfilled"
       ? outcome.value
@@ -250,7 +264,9 @@ async function fetchLiveAnswers(
  * arrives, so a slow call that hits the step timeout cannot discard answers
  * already paid for. An answer that DataForSEO's backend failed is asked again,
  * up to AI_ANSWER_ATTEMPTS. Model answers have no language setting: only the
- * country guides the web search.
+ * country guides the web search. Each answer is admitted on its own, so once
+ * the batch settles, a project DataForSEO refusal of any answer throws with
+ * the refused answers still pending, and the workflow stops its paid steps.
  */
 export async function collectAiModelBatch(
   runId: string,
@@ -266,7 +282,7 @@ export async function collectAiModelBatch(
   const client = createDataforseoClient(customer);
   const modelName = await resolveLatestLlmModelName(modelSlug);
   const country = getIsoCountryCode(market.locationCode).toUpperCase();
-  await Promise.all(
+  const refusals = await Promise.all(
     batch.tasks.map(async (task) => {
       for (let attempt = 1; ; attempt++) {
         try {
@@ -280,8 +296,9 @@ export async function collectAiModelBatch(
             maxOutputTokens: MODEL_MAX_OUTPUT_TOKENS,
           });
           await saveAiAnswer(task.tag, parseLlmResponseAnswer(result), brands);
-          return;
+          return null;
         } catch (cause) {
+          if (isProjectDataforseoRefusal(cause)) return cause;
           // A charged task error is a task DataForSEO returned with its cost.
           if (
             cause instanceof DataforseoChargedTaskError &&
@@ -297,11 +314,13 @@ export async function collectAiModelBatch(
           );
           const code = asAppError(cause)?.code ?? "INTERNAL_ERROR";
           await repo.failPendingObservations(runId, code, [task.tag]);
-          return;
+          return null;
         }
       }
     }),
   );
+  const refusal = refusals.find((cause) => cause !== null);
+  if (refusal) throw refusal;
 }
 
 /**
@@ -417,8 +436,23 @@ async function saveAiAnswer(
   });
 }
 
-/** Fails answers that never arrived and records how the run finished. */
-export async function finalizeAiRun(runId: string) {
+/**
+ * Fails answers a project DataForSEO refusal left unasked, with its code.
+ * Answers no longer pending keep their outcome.
+ */
+export async function failRefusedAnswers(
+  runId: string,
+  refusal: ErrorCode,
+  tags: string[],
+) {
+  await repo.failPendingObservations(runId, refusal, tags);
+}
+
+/**
+ * Fails answers that never arrived and records how the run finished. A run a
+ * project DataForSEO refusal stopped keeps that code as the tracker's notice.
+ */
+export async function finalizeAiRun(runId: string, refusal: ErrorCode | null) {
   const run = await repo.getRunInternal(runId);
   if (!run || run.status !== "running") return;
   await repo.failPendingObservations(runId, AI_ANSWER_FAILURES.notArrived);
@@ -434,7 +468,9 @@ export async function finalizeAiRun(runId: string) {
     status,
     completedAt: new Date().toISOString(),
   });
-  if (status !== "failed")
+  if (refusal)
+    await repo.updateTracker(run.trackerId, { lastSkipReason: refusal });
+  else if (status !== "failed")
     await repo.updateTracker(run.trackerId, { lastSkipReason: null });
 }
 

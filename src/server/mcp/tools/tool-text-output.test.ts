@@ -284,6 +284,25 @@ describe("MCP tool text output (service-backed tools)", () => {
     });
   });
 
+  it("get_rank_tracker says why a tracker's last check was skipped", async () => {
+    mocks.getConfigs.mockResolvedValue([
+      {
+        id: "tracker_1",
+        domain: "example.com",
+        lastSkipReason: "project_dataforseo_paused",
+      },
+    ]);
+
+    const result = await getRankTrackerTool.handler(
+      { projectId: "project_1" },
+      toolContext,
+    );
+
+    expect(textContent(result)).toContain(
+      "last check stopped: paid DataForSEO usage is paused for this project",
+    );
+  });
+
   it("get_ranked_keywords renders nested provider rows as a text table", async () => {
     const rankedKeywords = vi.fn().mockResolvedValue({
       items: [

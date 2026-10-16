@@ -4,10 +4,12 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers";
 import { pgStep } from "./pgStep";
+import { stepProjectRefusal, type ProjectRefusalCode } from "./projectRefusal";
 import {
   collectAiLiveBatch,
   collectAiModelBatch,
   collectAiRound,
+  failRefusedAnswers,
   finalizeAiRun,
   markAiRunFailed,
   postAiBatch,
@@ -87,8 +89,39 @@ export class AiVisibilityWorkflow extends WorkflowEntrypoint<
       console.error(`[ai-visibility] ${runId} failed:`, error);
       return markFailed(error);
     };
-    let pending: AiPendingTask[] = [];
     let plan: Awaited<ReturnType<typeof prepareAiRun>>;
+    try {
+      plan = await pgStep(step, "prepare", SINGLE_ATTEMPT, () =>
+        prepareAiRun(runId),
+      );
+    } catch (error) {
+      return failRun(error);
+    }
+    let pending: AiPendingTask[] = [];
+    // Set once the project's DataForSEO budget refuses a paid step. Paid work
+    // ends there: every answer not yet asked or posted fails with the code,
+    // and answers already posted keep being collected. Like `pending`, it is
+    // rebuilt from step outcomes on replay. An object, since `collect` sets it.
+    const stop: { refusal: ProjectRefusalCode | null } = { refusal: null };
+    const stopIfRefused = async (error: unknown, name: string) => {
+      const refusal = stepProjectRefusal(error);
+      if (!refusal) return false;
+      console.info(`[ai-visibility] ${runId} ${name} not sent: ${refusal}`);
+      stop.refusal = refusal;
+      const posted = new Set(pending.map((task) => task.tag));
+      const unasked = [
+        ...plan.batches.flatMap((batch) =>
+          Array.isArray(batch) ? batch : batch.tasks,
+        ),
+        ...plan.modelBatches.flatMap((batch) => batch.tasks),
+      ]
+        .map((task) => task.tag)
+        .filter((tag) => !posted.has(tag));
+      await pgStep(step, "fail-refused", COLLECT_STEP, () =>
+        failRefusedAnswers(runId, refusal, unasked),
+      );
+      return true;
+    };
     // Reads the pending answers once, then posts each answer that DataForSEO's
     // backend failed again in its own step, since a post is billed. The read
     // steps are `read-*`, not the older `collect-*`: a run in flight across a
@@ -98,7 +131,7 @@ export class AiVisibilityWorkflow extends WorkflowEntrypoint<
       let round: Awaited<ReturnType<typeof collectAiRound>>;
       try {
         round = await pgStep(step, `read-${name}`, COLLECT_STEP, () =>
-          collectAiRound(runId, remaining, canRetry),
+          collectAiRound(runId, remaining, canRetry && !stop.refusal),
         );
       } catch (error) {
         // Posted tasks are already paid for; keep polling them next round.
@@ -107,53 +140,54 @@ export class AiVisibilityWorkflow extends WorkflowEntrypoint<
       }
       pending = round.pending;
       for (const [index, batch] of round.retry.entries()) {
+        const repost = `repost-${name}-${index}`;
         try {
           pending.push(
-            ...(await pgStep(
-              step,
-              `repost-${name}-${index}`,
-              SINGLE_ATTEMPT,
-              () => postAiBatch(runId, customer, plan.market, batch),
-            )),
-          );
-        } catch (error) {
-          // Its answers fail at finalize.
-          console.warn(`[ai-visibility] ${runId} repost-${name}:`, error);
-        }
-      }
-    };
-    try {
-      plan = await pgStep(step, "prepare", SINGLE_ATTEMPT, () =>
-        prepareAiRun(runId),
-      );
-      // Live runs save each live batch as it returns, so nothing is left
-      // pending to poll.
-      if (plan.live)
-        for (const [index, tasks] of plan.batches.entries())
-          await pgStep(step, `live-${index}`, LIVE_STEP, () =>
-            collectAiLiveBatch(runId, customer, plan.market, tasks),
-          );
-      else
-        for (const [index, batch] of plan.batches.entries())
-          pending.push(
-            ...(await pgStep(step, `post-${index}`, SINGLE_ATTEMPT, () =>
+            ...(await pgStep(step, repost, SINGLE_ATTEMPT, () =>
               postAiBatch(runId, customer, plan.market, batch),
             )),
           );
-    } catch (error) {
-      return failRun(error);
+        } catch (error) {
+          if (await stopIfRefused(error, repost)) return;
+          // Its answers fail at finalize.
+          console.warn(`[ai-visibility] ${runId} ${repost}:`, error);
+        }
+      }
+    };
+    // Live runs save each live batch as it returns, so nothing is left
+    // pending to poll.
+    for (const [index, batch] of plan.batches.entries()) {
+      const name = `${plan.live ? "live" : "post"}-${index}`;
+      try {
+        if (Array.isArray(batch))
+          await pgStep(step, name, LIVE_STEP, () =>
+            collectAiLiveBatch(runId, customer, plan.market, batch),
+          );
+        else
+          pending.push(
+            ...(await pgStep(step, name, SINGLE_ATTEMPT, () =>
+              postAiBatch(runId, customer, plan.market, batch),
+            )),
+          );
+      } catch (error) {
+        if (await stopIfRefused(error, name)) break;
+        return failRun(error);
+      }
     }
     // Claude and Perplexity answers come from the model API on every run.
     // Queued answers process meanwhile, and each model batch is followed by
     // one free read of them.
     for (const [index, batch] of plan.modelBatches.entries()) {
+      if (stop.refusal) break;
       try {
         await pgStep(step, `model-${index}`, LIVE_STEP, () =>
           collectAiModelBatch(runId, customer, plan.market, batch),
         );
       } catch (error) {
-        // Its unsaved answers fail at finalize; the other batches continue.
-        console.warn(`[ai-visibility] ${runId} model-${index}:`, error);
+        // Otherwise its unsaved answers fail at finalize and the other
+        // batches continue.
+        if (!(await stopIfRefused(error, `model-${index}`)))
+          console.warn(`[ai-visibility] ${runId} model-${index}:`, error);
       }
       if (pending.length) await collect(`model-${index}`, true);
     }
@@ -176,7 +210,7 @@ export class AiVisibilityWorkflow extends WorkflowEntrypoint<
     }
     try {
       await pgStep(step, "finalize", SINGLE_ATTEMPT, () =>
-        finalizeAiRun(runId),
+        finalizeAiRun(runId, stop.refusal),
       );
     } catch (error) {
       return failRun(error);

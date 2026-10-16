@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   live: vi.fn(),
   model: vi.fn(),
   collect: vi.fn(),
+  failRefused: vi.fn(),
   finalize: vi.fn(),
   markFailed: vi.fn(),
   sleep: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock(
     collectAiLiveBatch: mocks.live,
     collectAiModelBatch: mocks.model,
     collectAiRound: mocks.collect,
+    failRefusedAnswers: mocks.failRefused,
     finalizeAiRun: mocks.finalize,
     markAiRunFailed: mocks.markFailed,
   }),
@@ -48,6 +50,10 @@ const customer = {
   projectId: "project",
 };
 const task = { tag: "answer", taskId: "task", engine: "chatgpt" };
+const oneAnswerBatch = (engine: string, tag: string) => ({
+  engine,
+  tasks: [{ tag, prompt: "" }],
+});
 function execute() {
   // The mocked base and pgStep use no execution context, bindings, or step methods besides sleep.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- minimal test runtime boundary
@@ -91,7 +97,7 @@ describe("AI visibility workflow", () => {
       true,
     );
     expect(mocks.sleep).toHaveBeenCalledOnce();
-    expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith("run");
+    expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith("run", null);
   });
 
   it("asks the model API for Claude and Perplexity, then reads queued answers before sleeping", async () => {
@@ -108,7 +114,7 @@ describe("AI visibility workflow", () => {
       timeout: "5 minutes",
     });
     expect(mocks.sleep).not.toHaveBeenCalled();
-    expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith("run");
+    expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith("run", null);
   });
 
   it("collects a manual run's live batches without posting or polling", async () => {
@@ -122,7 +128,42 @@ describe("AI visibility workflow", () => {
     expect(mocks.live).toHaveBeenCalledOnce();
     expect(mocks.post).not.toHaveBeenCalled();
     expect(mocks.sleep).not.toHaveBeenCalled();
-    expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith("run");
+    expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith("run", null);
+  });
+
+  it("stops paid steps at a refused post, failing the unposted answers and still collecting the posted ones", async () => {
+    mocks.prepare.mockResolvedValue({
+      market: { locationCode: 2840, languageCode: "en" },
+      modelBatches: [oneAnswerBatch("claude", "model-answer")],
+      live: false,
+      batches: [
+        oneAnswerBatch("chatgpt", "answer"),
+        oneAnswerBatch("gemini", "refused"),
+        oneAnswerBatch("google_ai_mode", "later"),
+      ],
+    });
+    // The workflow engine hands a step's error back without its class.
+    mocks.post
+      .mockResolvedValueOnce([task])
+      .mockRejectedValueOnce(new Error("PROJECT_BUDGET_EXCEEDED"));
+    mocks.collect.mockResolvedValue({ pending: [], retry: [] });
+
+    await execute();
+
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    expect(mocks.model).not.toHaveBeenCalled();
+    expect(mocks.failRefused).toHaveBeenCalledExactlyOnceWith(
+      "run",
+      "PROJECT_BUDGET_EXCEEDED",
+      ["refused", "later", "model-answer"],
+    );
+    // Read without posting failed answers again.
+    expect(mocks.collect).toHaveBeenCalledExactlyOnceWith("run", [task], false);
+    expect(mocks.markFailed).not.toHaveBeenCalled();
+    expect(mocks.finalize).toHaveBeenCalledExactlyOnceWith(
+      "run",
+      "PROJECT_BUDGET_EXCEEDED",
+    );
   });
 
   it("stops polling when the collection window closes and finalizes what arrived", async () => {

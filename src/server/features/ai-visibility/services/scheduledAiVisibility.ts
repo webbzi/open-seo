@@ -1,3 +1,4 @@
+import { isProjectDataforseoRefusal } from "@/server/lib/dataforseo/projectBudgetRefusal";
 import { AppError } from "@/server/lib/errors";
 import { pruneAiVisibility } from "./aiVisibilityRetention";
 import { AiVisibilityRepository as repo } from "../repositories/AiVisibilityRepository";
@@ -62,8 +63,11 @@ export async function runScheduledAiVisibility() {
       started++;
       answersStarted += answers;
     } catch (error) {
-      // startRun records a credits skip on the tracker.
-      if (error instanceof AppError && error.code === "INSUFFICIENT_CREDITS")
+      // startRun records a credits or project budget skip on the tracker.
+      if (
+        (error instanceof AppError && error.code === "INSUFFICIENT_CREDITS") ||
+        isProjectDataforseoRefusal(error)
+      )
         continue;
       if (!(error instanceof AiVisibilityError))
         console.error("[ai-visibility] scheduled check failed to start", {

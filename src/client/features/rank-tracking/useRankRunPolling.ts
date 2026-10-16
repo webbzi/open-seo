@@ -33,6 +33,10 @@ export function useRankRunPolling(projectId: string, configId: string) {
         void queryClient.invalidateQueries({
           queryKey: ["rankKeywordHistory", projectId, configId],
         });
+        // A finished run sets or clears its config's skip reason.
+        void queryClient.invalidateQueries({
+          queryKey: ["rankTrackingConfigs", projectId],
+        });
       }
 
       // Keep polling active runs, including stale ones (they'll be cleaned up

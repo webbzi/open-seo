@@ -16,6 +16,7 @@ import {
   type BillingCustomerContext,
 } from "@/server/billing/subscription";
 import { AppError } from "@/server/lib/errors";
+import { projectDataforseoRefusal } from "@/server/features/projects/services/projectDataforseoPrecheck";
 import type { AiRun } from "@/shared/ai-visibility";
 import type { RunAiCheckInput } from "@/types/schemas/ai-visibility";
 import { requireConfiguration } from "./aiVisibilityMutation";
@@ -118,6 +119,18 @@ export async function startRun(
         "INSUFFICIENT_CREDITS",
         "Not enough credits for this AI visibility check.",
       );
+    }
+  } else {
+    // Self-hosted: the project's DataForSEO budget would refuse every answer.
+    const refusal = await projectDataforseoRefusal(
+      billing.organizationId,
+      project.id,
+    );
+    if (refusal) {
+      await repo.updateTracker(config.tracker.id, {
+        lastSkipReason: refusal.code,
+      });
+      throw refusal;
     }
   }
   const own = { name: project.name, domain: project.domain };

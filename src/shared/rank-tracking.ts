@@ -135,10 +135,14 @@ type ScheduledRankTrackingInterval = Exclude<
 
 // Values written to rank_tracking_configs.last_skip_reason (free-form text in
 // the schema; this union keeps writers and UI comparisons in sync).
+// The two project reasons are set by a run the project's DataForSEO budget
+// refused, whether it was skipped outright or stopped partway.
 export type RankTrackingSkipReason =
   | "plan_required"
   | "no_keywords"
-  | "insufficient_credits";
+  | "insufficient_credits"
+  | "project_budget_exceeded"
+  | "project_dataforseo_paused";
 
 export function estimateScheduledRankCheckCredits(
   keywords: readonly string[],

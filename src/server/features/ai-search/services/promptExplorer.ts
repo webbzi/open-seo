@@ -4,6 +4,7 @@ import {
   type ProjectBillingCustomer,
 } from "@/server/lib/dataforseo";
 import { resolveLatestLlmModelName } from "@/server/lib/dataforseo/llm-models";
+import { isProjectDataforseoRefusal } from "@/server/lib/dataforseo/projectBudgetRefusal";
 import type { LlmResponseResult } from "@/server/lib/dataforseoLlmSchemas";
 import { AppError } from "@/server/lib/errors";
 import { assertPaidAiSearchPlan } from "./access";
@@ -340,10 +341,12 @@ function mapErrorToResult(
   if (
     reason instanceof AppError &&
     (reason.code === "INSUFFICIENT_CREDITS" ||
-      reason.code === "AI_SEARCH_BILLING_ISSUE")
+      reason.code === "AI_SEARCH_BILLING_ISSUE" ||
+      isProjectDataforseoRefusal(reason))
   ) {
-    // These account-level failures apply to every model, so surface one clear
-    // error instead of silently degrading to per-model failures.
+    // These account- and project-level failures apply to every model, so
+    // surface one clear error instead of silently degrading to per-model
+    // failures.
     throw reason;
   }
 

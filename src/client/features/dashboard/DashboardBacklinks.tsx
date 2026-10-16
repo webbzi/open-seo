@@ -56,7 +56,9 @@ export function DashboardBacklinks({
           description={
             <>
               {DESCRIPTIONS[kind]}
-              {query.data ? <Freshness {...query.data} /> : null}
+              {query.data ? (
+                <Freshness projectId={projectId} {...query.data} />
+              ) : null}
             </>
           }
         >
