@@ -39,7 +39,10 @@ async function withUmamiErrors<T>(run: () => Promise<T>): Promise<T> {
     return await run();
   } catch (error) {
     if (!(error instanceof UmamiError)) throw error;
-    console.warn("umami.request_failed", { code: error.code });
+    console.warn("umami.request_failed", {
+      code: error.code,
+      message: error.message,
+    });
     throw new AppError(APP_ERROR_CODE[error.code], error.message);
   }
 }

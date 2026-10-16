@@ -21,6 +21,7 @@ export const Route = createFileRoute(
     );
     void queryClient.prefetchQuery(umamiConnectionOptions(params.projectId));
   },
+  remountDeps: ({ params }) => params.projectId,
   component: ProjectIntegrationsRoute,
 });
 

@@ -15,9 +15,10 @@ a per-project mapping, a dashboard card, and read-only agent tools. SAM chat is
 out of scope.
 
 Umami v3.4.0 added account API keys for self-hosted instances
-(`Authorization: Bearer umami_…`). They do not expire and can be revoked.
-Earlier versions offer only username/password login tokens, and Umami Cloud
-does not offer API keys. The API has no version endpoint. It answers 401 both
+(`Authorization: Bearer umami_…`). They do not expire and can be revoked, and
+they are disabled in Cloud mode. Earlier versions offer only username/password
+login tokens. Umami Cloud has its own API keys at api.umami.is, which use a
+different endpoint and authentication scheme. The API has no version endpoint. It answers 401 both
 for a bad key and for a website the key cannot read. Umami websites have no
 time zone setting.
 
@@ -163,10 +164,6 @@ mapping.
 
 `UmamiCard` appears only when the project is connected and has no dismissal
 state. The Google Analytics connect nudge is hidden while Umami is connected.
-
-### Plugin
-
-The new MCP tools ship with a patch bump of the OpenSEO plugin.
 
 ## Alternatives considered
 

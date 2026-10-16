@@ -2,8 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   isTelemetryOptOutValue,
   looksLikeDataForSeoKey,
+  parseUmamiApiUrl,
   validateTeamDomain,
 } from "./selfhost-checks";
+
+describe("parseUmamiApiUrl", () => {
+  it.each([
+    ["https://umami.example.com", "https://umami.example.com"],
+    ["https://umami.example.com/", "https://umami.example.com"],
+    ["https://umami.example.com/api", "https://umami.example.com"],
+    ["https://umami.example.com/api/", "https://umami.example.com"],
+    ["https://example.com/umami/api", "https://example.com/umami"],
+  ])("normalizes %s", (value, expected) => {
+    expect(parseUmamiApiUrl(value)).toBe(expected);
+  });
+});
 
 describe("validateTeamDomain", () => {
   it("trims whitespace and trailing slashes", () => {

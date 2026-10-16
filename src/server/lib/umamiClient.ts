@@ -106,11 +106,13 @@ async function request<T>(
       redirect: "manual",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-  } catch {
-    // Network failure or timeout.
+  } catch (error) {
+    // Fixed copy only: the cause can carry the instance URL.
     throw new UmamiError(
       "umami_upstream_unavailable",
-      "Umami is temporarily unavailable.",
+      error instanceof Error && error.name === "TimeoutError"
+        ? "Umami did not respond in time."
+        : "Could not connect to Umami.",
     );
   }
   if (!response.ok) throw errorForStatus(response);

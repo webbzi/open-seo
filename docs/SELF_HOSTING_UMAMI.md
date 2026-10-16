@@ -7,7 +7,9 @@ read-only. One OpenSEO deployment connects to one Umami instance.
 ## What you'll need
 
 - A self-hosted Umami instance running **v3.4.0 or later**. Earlier versions
-  have no account API keys, and Umami Cloud does not offer them.
+  have no account API keys. Self-hosted account API keys are disabled in Cloud
+  mode, and Umami Cloud's own API keys (api.umami.is) are a different API that
+  OpenSEO does not support.
 - An Umami admin login, to create the user that owns the API key.
 - Access to the OpenSEO deployment's environment variables.
 
@@ -38,8 +40,10 @@ Umami does not list those websites for the user, so OpenSEO can't offer them.
 
 The simplest setup is a team that holds the websites you want to expose, with
 the dedicated user added as a **Manager**. OpenSEO never changes anything in
-Umami, but a Manager role can edit the team's websites, so keep the key
-secret.
+Umami, but a Manager role can edit and delete the team's websites, and a leaked
+key can do the same to every website it lists. Keep the key secret, and give
+the user the least-privileged role that still lists the websites: Owner and
+Manager are the only team roles that do.
 
 ## 3) Create the API key
 

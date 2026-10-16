@@ -58,7 +58,8 @@ export function parseUmamiApiUrl(value: string): string | null {
     url.protocol === "https:" || (url.protocol === "http:" && isLocal);
   if (!allowedScheme || url.username || url.password || url.search || url.hash)
     return null;
-  return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+  // The client appends /api itself, so a pasted ".../api" would double it.
+  return `${url.origin}${url.pathname.replace(/\/+$/, "").replace(/\/api$/, "")}`;
 }
 
 // Umami treats a bearer token as an account API key only when it carries this

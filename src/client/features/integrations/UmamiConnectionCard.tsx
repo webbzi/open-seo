@@ -70,6 +70,9 @@ export function UmamiConnectionCard({ projectId }: { projectId: string }) {
     queryKey: websitesKey,
     queryFn: () => listUmamiWebsites({ data: { projectId } }),
     enabled: showPicker,
+    // The card has its own Retry; the default 3 retries leave the picker
+    // loading for up to a minute.
+    retry: false,
   });
 
   // Seeds the connection before the refetch lands, so the card doesn't flash
@@ -82,6 +85,13 @@ export function UmamiConnectionCard({ projectId }: { projectId: string }) {
     queryClient.removeQueries({ queryKey: websitesKey });
     void queryClient.invalidateQueries({
       queryKey: connectionOptions.queryKey,
+    });
+    // The dashboard card would otherwise keep the previous website's numbers.
+    void queryClient.invalidateQueries({
+      queryKey: ["dashboardActivation", projectId],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["dashboardUmamiReport", projectId],
     });
     setPicking(false);
   };
@@ -162,6 +172,7 @@ export function UmamiConnectionCard({ projectId }: { projectId: string }) {
           error={websitesQuery.isError ? websitesQuery.error : null}
           websites={websitesQuery.data?.websites ?? []}
           onRetry={() => void websitesQuery.refetch()}
+          retrying={websitesQuery.isFetching}
           saving={connectMutation.isPending}
           saveLabel={connected ? "Save website" : "Connect"}
           onSave={(websiteId) => connectMutation.mutate(websiteId)}
@@ -257,6 +268,7 @@ function UmamiWebsitePicker({
   error,
   websites,
   onRetry,
+  retrying,
   saving,
   saveLabel,
   onSave,
@@ -267,6 +279,7 @@ function UmamiWebsitePicker({
   error: unknown;
   websites: UmamiWebsite[];
   onRetry: () => void;
+  retrying: boolean;
   saving: boolean;
   saveLabel: string;
   onSave: (websiteId: string) => void;
@@ -294,6 +307,7 @@ function UmamiWebsitePicker({
         error={error}
         fallback="Couldn't load websites from Umami."
         onRetry={onRetry}
+        isRetrying={retrying}
       />
     );
   }
