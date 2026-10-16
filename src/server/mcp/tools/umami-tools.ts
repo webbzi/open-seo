@@ -196,11 +196,15 @@ function overviewText(result: UmamiOverview): string {
       format: percentCell,
     },
   ]);
-  const trend = formatMcpTable(result.trend, [
-    { header: "date", value: (row) => row.date },
-    { header: "pageviews", value: (row) => row.pageviews },
-    { header: "visitors", value: (row) => row.visitors },
-  ]);
+  // Empty only when the range is too long; the warning already says why.
+  const trend =
+    result.trend.length === 0
+      ? ""
+      : `\n\nDaily trend:\n${formatMcpTable(result.trend, [
+          { header: "date", value: (row) => row.date },
+          { header: "pageviews", value: (row) => row.pageviews },
+          { header: "visitors", value: (row) => row.visitors },
+        ])}`;
   const channels =
     result.channels.length === 0
       ? ""
@@ -208,7 +212,7 @@ function overviewText(result: UmamiOverview): string {
           { header: "channel", value: (row) => row.channel },
           { header: "visits", value: (row) => row.visits },
         ])}`;
-  return `${header}${warningsLine(result.warnings)}\n\n${totals}\n\nDaily trend:\n${trend}${channels}`;
+  return `${header}${warningsLine(result.warnings)}\n\n${totals}${trend}${channels}`;
 }
 
 const BREAKDOWN_COLUMNS: McpTableColumn<UmamiBreakdownRow>[] = [
