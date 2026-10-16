@@ -274,6 +274,9 @@ const dataEnv = {
   CRAWLER_ACCESS_SECRET: optionalSecret("CRAWLER_ACCESS_SECRET"),
   GOOGLE_CLIENT_ID: optionalVar("GOOGLE_CLIENT_ID"),
   GOOGLE_CLIENT_SECRET: optionalSecret("GOOGLE_CLIENT_SECRET"),
+  // Optional Umami analytics (docs/SELF_HOSTING_UMAMI.md); off unless both set.
+  UMAMI_API_URL: optionalVar("UMAMI_API_URL"),
+  UMAMI_API_KEY: optionalSecret("UMAMI_API_KEY"),
   OPENROUTER_API_KEY: optionalSecret("OPENROUTER_API_KEY"),
   OPENROUTER_MODEL: optionalVar("OPENROUTER_MODEL"),
   CONTEXT_API_KEY: optionalSecret("CONTEXT_API_KEY"),

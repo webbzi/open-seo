@@ -400,6 +400,13 @@
       "when": 1792090725640,
       "tag": "0056_project_dataforseo_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "6",
+      "when": 1792179979224,
+      "tag": "0057_umami_connections",
+      "breakpoints": true
     }
   ]
 }

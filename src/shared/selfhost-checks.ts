@@ -42,6 +42,32 @@ export function looksLikeDataForSeoKey(value: string): boolean {
   }
 }
 
+// UMAMI_API_URL is the Umami instance URL (an origin, or an origin plus the
+// instance's base path). It must be https so the API key never crosses the
+// network in the clear; plain http is accepted only for a Umami on the same
+// machine. Returns the URL without a trailing slash, or null when invalid.
+export function parseUmamiApiUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return null;
+  }
+  const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  const allowedScheme =
+    url.protocol === "https:" || (url.protocol === "http:" && isLocal);
+  if (!allowedScheme || url.username || url.password || url.search || url.hash)
+    return null;
+  return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+}
+
+// Umami treats a bearer token as an account API key only when it carries this
+// prefix; anything else is read as a short-lived login token, which OpenSEO
+// does not support.
+export function looksLikeUmamiApiKey(value: string): boolean {
+  return value.trim().startsWith("umami_");
+}
+
 // OPENSEO_TELEMETRY_DISABLED / DO_NOT_TRACK semantics: any value except an
 // explicit "off" string disables telemetry (fail toward privacy), but
 // "0"/"false"/"no"/"off" mean what the operator wrote — telemetry stays on.

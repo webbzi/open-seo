@@ -1,7 +1,9 @@
 import { AUTH_MODES } from "@/lib/auth-mode";
 import {
   looksLikeDataForSeoKey,
+  looksLikeUmamiApiKey,
   MIN_BETTER_AUTH_SECRET_LENGTH,
+  parseUmamiApiUrl,
   validateTeamDomain,
 } from "@/shared/selfhost-checks";
 
@@ -14,7 +16,7 @@ type PreflightLevel = "ok" | "info" | "warn" | "fail";
 
 type PreflightItem = {
   // Stable identifier shared with /api/health's check map.
-  key: "auth" | "dataforseo" | "gsc" | "ai" | "rendering" | "runtime";
+  key: "auth" | "dataforseo" | "gsc" | "umami" | "ai" | "rendering" | "runtime";
   name: string;
   level: PreflightLevel;
   message: string;
@@ -153,6 +155,46 @@ function checkDataForSeo(env: EnvRecord, items: PreflightItem[]): void {
   });
 }
 
+// Mirrors getUmamiConfig: Umami stays off unless both values are valid.
+function checkUmami(env: EnvRecord): PreflightItem {
+  const url = get(env, "UMAMI_API_URL");
+  const apiKey = get(env, "UMAMI_API_KEY");
+  const item = { key: "umami", name: "Umami" } as const;
+
+  if (!url && !apiKey) {
+    return {
+      ...item,
+      level: "info",
+      message: "Not configured (optional). See docs/SELF_HOSTING_UMAMI.md.",
+    };
+  }
+  if (!url || !apiKey) {
+    return {
+      ...item,
+      level: "warn",
+      message:
+        "Only one of UMAMI_API_URL / UMAMI_API_KEY is set — both are required.",
+    };
+  }
+  if (!parseUmamiApiUrl(url)) {
+    return {
+      ...item,
+      level: "warn",
+      message:
+        "UMAMI_API_URL must be an https URL like https://umami.example.com (http is allowed only for localhost or 127.0.0.1), with no credentials, query, or fragment. Umami stays DISABLED.",
+    };
+  }
+  if (!looksLikeUmamiApiKey(apiKey)) {
+    return {
+      ...item,
+      level: "warn",
+      message:
+        'UMAMI_API_KEY must be a Umami v3.4+ API key starting with "umami_". Umami stays DISABLED.',
+    };
+  }
+  return { ...item, level: "ok", message: "Configured" };
+}
+
 function checkOptionalFeatures(env: EnvRecord, items: PreflightItem[]): void {
   const clientId = get(env, "GOOGLE_CLIENT_ID");
   const clientSecret = get(env, "GOOGLE_CLIENT_SECRET");
@@ -194,6 +236,8 @@ function checkOptionalFeatures(env: EnvRecord, items: PreflightItem[]): void {
         "Not configured (optional). See docs/SELF_HOSTING_GOOGLE_SEARCH_CONSOLE.md.",
     });
   }
+
+  items.push(checkUmami(env));
 
   items.push(
     get(env, "OPENROUTER_API_KEY")

@@ -29,3 +29,7 @@ New DataForSEO accounts include $1 of free credit to test with, and the minimum 
 ### Google Search Console
 
 Search Console is optional and works in self-hosted deployments using your own Google OAuth client. It takes about 10 minutes of one-time setup. See the [Google Search Console guide on GitHub](https://github.com/every-app/open-seo/blob/main/docs/SELF_HOSTING_GOOGLE_SEARCH_CONSOLE.md).
+
+### Umami
+
+If you run your own Umami (v3.4.0 or later), each project can be mapped to one of its websites. You set the Umami URL and an API key on the deployment, then pick a website per project. See the [Umami guide on GitHub](https://github.com/every-app/open-seo/blob/main/docs/SELF_HOSTING_UMAMI.md).
