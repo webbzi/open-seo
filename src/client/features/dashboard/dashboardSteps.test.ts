@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { DashboardActivation } from "@/server/features/dashboard/services/DashboardService";
-import { getStepStatus, setupSteps } from "./dashboardSteps";
+import { getStepStatus, setupSteps, showGa4Card } from "./dashboardSteps";
 
 const fresh: DashboardActivation = {
   domain: null,
   ga4: { connected: false, propertyDisplayName: null, cardDismissedAt: null },
+  umami: {
+    configured: false,
+    connected: false,
+    websiteId: null,
+    websiteName: null,
+  },
   gsc: { connected: false, siteUrl: null },
   mcp: { authorizedAt: null, firstToolCallAt: null, cardDismissedAt: null },
   competitorClickedAt: null,
@@ -40,6 +46,26 @@ describe("dashboard checklist", () => {
     };
     expect(
       setupSteps.every((step) => getStepStatus(complete, step.id) === "done"),
+    ).toBe(true);
+  });
+});
+
+describe("GA4 card visibility", () => {
+  const umami = {
+    configured: true,
+    connected: true,
+    websiteId: "site-id",
+    websiteName: "Site",
+  };
+  it("hides the connect pitch when Umami is connected, never a connected card", () => {
+    expect(showGa4Card(fresh)).toBe(true);
+    expect(showGa4Card({ ...fresh, umami })).toBe(false);
+    expect(
+      showGa4Card({
+        ...fresh,
+        umami,
+        ga4: { ...fresh.ga4, connected: true },
+      }),
     ).toBe(true);
   });
 });
