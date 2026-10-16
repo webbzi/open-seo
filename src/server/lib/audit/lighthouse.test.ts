@@ -126,7 +126,7 @@ describe("fetchLighthouseResult", () => {
   it.each([
     [
       "PROJECT_BUDGET_EXCEEDED",
-      "Skipped: this project's DataForSEO allowance is used up",
+      "Skipped: not enough of this project's DataForSEO allowance was left",
     ],
     [
       "PROJECT_DATAFORSEO_PAUSED",

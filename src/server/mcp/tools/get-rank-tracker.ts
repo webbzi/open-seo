@@ -63,7 +63,7 @@ const SKIP_REASON_TEXT: Partial<Record<string, string>> = {
   no_keywords: "scheduled check skipped: no keywords to check",
   insufficient_credits: "scheduled check skipped: not enough credits",
   project_budget_exceeded:
-    "last check stopped: the project's DataForSEO allowance is used up; it can be raised in the project's API spending settings",
+    "last check stopped: the project's DataForSEO allowance was too low for it; it can be raised in the project's API spending settings",
   project_dataforseo_paused:
     "last check stopped: paid DataForSEO usage is paused for this project; it can be resumed in the project's API spending settings",
 } satisfies Record<RankTrackingSkipReason, string>;

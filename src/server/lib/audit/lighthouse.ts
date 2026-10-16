@@ -86,7 +86,7 @@ export async function fetchLighthouseResult(
       const errorMessage =
         error.code === "PROJECT_DATAFORSEO_PAUSED"
           ? "Skipped: this project's DataForSEO paid usage is paused"
-          : "Skipped: this project's DataForSEO allowance is used up";
+          : "Skipped: not enough of this project's DataForSEO allowance was left";
       console.info(
         `Lighthouse skipped for ${url} (${strategy}): ${error.code}`,
       );

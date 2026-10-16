@@ -98,7 +98,8 @@ export async function runAuditPhases(
   await runLighthousePhase(step, {
     auditId,
     workflowInstanceId,
-    billingCustomer,
+    // The audit is the run its Lighthouse spend is recorded against.
+    billingCustomer: { ...billingCustomer, runId: auditId },
     projectId,
     startUrl,
     config,

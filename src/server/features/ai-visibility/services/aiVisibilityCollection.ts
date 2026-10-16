@@ -152,8 +152,9 @@ export async function postAiBatch(
   let posted: PostedAiTrackingTask[] = [];
   // A rejected entry is logged where it is parsed.
   let error: ErrorCode = "INTERNAL_ERROR";
+  const client = createDataforseoClient({ ...customer, runId });
   try {
-    posted = await createDataforseoClient(customer).aiSearch.trackingTaskPost({
+    posted = await client.aiSearch.trackingTaskPost({
       engine: batch.engine,
       tasks: batch.tasks,
       ...market,
@@ -195,7 +196,11 @@ export async function collectAiLiveBatch(
   let remaining = tasks;
   for (let attempt = 1; remaining.length > 0; attempt++) {
     if (attempt > 1) await waitBeforeRetry();
-    const answers = await fetchLiveAnswers(customer, market, remaining);
+    const answers = await fetchLiveAnswers(
+      { ...customer, runId },
+      market,
+      remaining,
+    );
     const retry: AiLiveTask[] = [];
     for (const [index, result] of answers.entries()) {
       const task = remaining[index];
@@ -279,7 +284,7 @@ export async function collectAiModelBatch(
     throw new AppError("INTERNAL_ERROR", `${modelSlug} has no model API batch`);
   const brands = await runBrands(runId);
   if (!brands) return;
-  const client = createDataforseoClient(customer);
+  const client = createDataforseoClient({ ...customer, runId });
   const modelName = await resolveLatestLlmModelName(modelSlug);
   const country = getIsoCountryCode(market.locationCode).toUpperCase();
   const refusals = await Promise.all(

@@ -144,7 +144,10 @@ import {
 } from "@/server/lib/dataforseo/client";
 import { dataforseoPricing } from "@/server/lib/dataforseo/pricing";
 import { dataforseoPost } from "@/server/lib/dataforseo/core";
-import { DataforseoChargedTaskError } from "@/server/lib/dataforseo/envelope";
+import {
+  assertOk,
+  DataforseoChargedTaskError,
+} from "@/server/lib/dataforseo/envelope";
 import { AppError } from "@/server/lib/errors";
 import { fetchBacklinksSummary } from "@/server/lib/dataforseo/backlinks";
 import { fetchRankCheckSerp } from "@/server/lib/dataforseo/serp";
@@ -222,6 +225,7 @@ describe("self-hosted project ledger", () => {
       actorUserId: "user_123",
       feature: null,
       operation: "backlinks.summary",
+      runId: null,
       estimatesUsd: [dataforseoPricing.backlinks.summary(backlinksInput)],
     });
     // No admission feature, so the billed path supplies it.
@@ -245,17 +249,25 @@ describe("self-hosted project ledger", () => {
   function failThroughRequestLayer(fetchMock: typeof fetch) {
     vi.stubGlobal("fetch", fetchMock);
     vi.mocked(fetchBacklinksSummary).mockImplementation(async () => {
-      await dataforseoPost("/v3/backlinks/summary/live", [backlinksInput], {
-        maxServerErrorRetries: 0,
-      });
-      throw new Error("expected the request to fail");
+      assertOk(
+        await dataforseoPost("/v3/backlinks/summary/live", [backlinksInput], {
+          maxServerErrorRetries: 0,
+        }),
+      );
+      // A response that passes assertOk fails item validation.
+      throw new AppError("INTERNAL_ERROR", "invalid response shape");
     });
   }
+
+  const respond = (body: object) =>
+    failThroughRequestLayer(
+      vi.fn<typeof fetch>().mockResolvedValue(Response.json(body)),
+    );
 
   it.each([
     {
       failure: "a charged task error at zero cost",
-      kind: "charged",
+      outcome: { kind: "charged", costUsd: 0 },
       setup: () =>
         vi.mocked(fetchBacklinksSummary).mockRejectedValue(
           new DataforseoChargedTaskError("DataForSEO task failed", {
@@ -265,8 +277,29 @@ describe("self-hosted project ledger", () => {
         ),
     },
     {
+      failure: "a request-level refusal in an HTTP 200 body at its cost",
+      outcome: { kind: "charged", costUsd: 0 },
+      setup: () =>
+        respond({
+          status_code: 40203,
+          status_message: "Cost limit exceeded.",
+          cost: 0,
+          tasks: null,
+        }),
+    },
+    {
+      failure: "a billed response that fails validation at its cost",
+      outcome: { kind: "charged", costUsd: 0.002, feature: "backlinks" },
+      setup: () =>
+        respond({
+          status_code: 20000,
+          cost: 0.002,
+          tasks: [{ status_code: 20000 }],
+        }),
+    },
+    {
       failure: "an error before any request was sent",
-      kind: "released",
+      outcome: { kind: "released" },
       setup: () =>
         vi
           .mocked(fetchBacklinksSummary)
@@ -274,7 +307,7 @@ describe("self-hosted project ledger", () => {
     },
     {
       failure: "an HTTP 4xx refusal",
-      kind: "released",
+      outcome: { kind: "released" },
       setup: () =>
         failThroughRequestLayer(
           vi
@@ -286,7 +319,7 @@ describe("self-hosted project ledger", () => {
     },
     {
       failure: "an HTTP 5xx",
-      kind: "unknown",
+      outcome: { kind: "unknown" },
       setup: () =>
         failThroughRequestLayer(
           vi
@@ -296,13 +329,13 @@ describe("self-hosted project ledger", () => {
     },
     {
       failure: "a transport failure after sending",
-      kind: "unknown",
+      outcome: { kind: "unknown" },
       setup: () =>
         failThroughRequestLayer(
           vi.fn<typeof fetch>().mockRejectedValue(new TypeError("network")),
         ),
     },
-  ])("settles $failure as $kind", async ({ kind, setup }) => {
+  ])("settles $failure as $outcome.kind", async ({ outcome, setup }) => {
     setup();
 
     const client = createDataforseoClient(billingCustomer);
@@ -310,7 +343,7 @@ describe("self-hosted project ledger", () => {
 
     expect(settleMock).toHaveBeenCalledExactlyOnceWith({
       ...projectScope,
-      outcomes: [expect.objectContaining({ usageId: "usage_0", kind })],
+      outcomes: [expect.objectContaining({ usageId: "usage_0", ...outcome })],
     });
   });
 
@@ -563,7 +596,10 @@ describe("rankCheckBatch", () => {
       )
       .mockRejectedValueOnce(new AppError("VALIDATION_ERROR"));
 
-    const client = createDataforseoClient(billingCustomer);
+    const client = createDataforseoClient({
+      ...billingCustomer,
+      runId: "run_123",
+    });
     const settled = await client.serp.rankCheckBatch([input, input, input]);
 
     expect(settled.map((outcome) => outcome.status)).toEqual([
@@ -576,6 +612,7 @@ describe("rankCheckBatch", () => {
       expect.objectContaining({
         operation: "serp.rankCheckBatch",
         feature: "rank_tracking",
+        runId: "run_123",
         estimatesUsd: [estimate, estimate, estimate],
       }),
     );

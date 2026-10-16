@@ -79,9 +79,12 @@ export { mapDataforseoPathToCreditFeature };
  * The customer every paid DataForSEO call is made for. Hosted mode bills the
  * organization's credits; self-hosted mode meters the project's own budget,
  * so a caller without an authorized project cannot build a client.
+ * `runId` labels the project ledger rows of a workflow run (rank check, AI
+ * visibility run, site audit) so its spend can be traced back to it.
  */
 export type ProjectBillingCustomer = BillingCustomerContext & {
   projectId: string;
+  runId?: string;
 };
 
 /**
@@ -501,6 +504,7 @@ async function meterProjectDataforseoCalls<T>(
       actorUserId: customer.userId,
       feature: creditFeature ?? null,
       operation,
+      runId: customer.runId ?? null,
       estimatesUsd,
     }));
   } catch (error) {
@@ -526,30 +530,44 @@ async function meterProjectDataforseoCalls<T>(
         }
       : { usageId, kind: "unknown" };
 
+  // In order: a charged task carries its own cost; a parsed body's top-level
+  // cost is what DataForSEO charged for the request, even for a request-level
+  // refusal (account cost limit, funds, rate limits) answered with HTTP 200.
+  // Without either, a call is provably unbilled only if nothing left this
+  // Worker or DataForSEO refused it with an HTTP 4xx. Transport failures,
+  // timeouts, 5xx and unreadable answers may have been billed.
+  const failedOutcome = (
+    usageId: string,
+    error: unknown,
+    dispatch: DataforseoDispatch,
+  ): SettleOutcome => {
+    if (error instanceof DataforseoChargedTaskError)
+      return chargedOutcome(usageId, error.billing);
+    if (dispatch.billing) return chargedOutcome(usageId, dispatch.billing);
+    const unbilled =
+      !dispatch.sent ||
+      (dispatch.status !== null &&
+        dispatch.status >= 400 &&
+        dispatch.status < 500);
+    return { usageId, kind: unbilled ? "released" : "unknown" };
+  };
+
   const work = (async () => {
     const outcomes: SettleOutcome[] = [];
     const settled = await Promise.allSettled(
       executes.map(async (execute, index) => {
         const usageId = usageIds[index];
-        const dispatch: DataforseoDispatch = { sent: false, status: null };
+        const dispatch: DataforseoDispatch = {
+          sent: false,
+          status: null,
+          billing: null,
+        };
         try {
           const result = await trackDataforseoDispatch(dispatch, execute);
           outcomes.push(chargedOutcome(usageId, result.billing));
           return result.data;
         } catch (error) {
-          // Nothing left this Worker, or DataForSEO refused the request with
-          // an HTTP 4xx before running a task: provably unbilled. Transport
-          // failures, timeouts, 5xx and unreadable answers may have been.
-          const unbilled =
-            !dispatch.sent ||
-            (dispatch.status !== null &&
-              dispatch.status >= 400 &&
-              dispatch.status < 500);
-          outcomes.push(
-            error instanceof DataforseoChargedTaskError
-              ? chargedOutcome(usageId, error.billing)
-              : { usageId, kind: unbilled ? "released" : "unknown" },
-          );
+          outcomes.push(failedOutcome(usageId, error, dispatch));
           throw error;
         }
       }),

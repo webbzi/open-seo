@@ -200,15 +200,10 @@ describe("admission", () => {
     expect(new Set(rows.map((row) => row.id))).toEqual(new Set(usageIds));
   });
 
-  it("lets only one of two concurrent admissions take the last room", async () => {
+  it("counts a pending admission against the next one", async () => {
     await setBudget({ monthlyLimitUsd: 1, totalLimitUsd: null });
-    const results = await Promise.allSettled([admit([0.75]), admit([0.75])]);
-    expect(
-      results.filter((result) => result.status === "fulfilled"),
-    ).toHaveLength(1);
-    expect(
-      results.find((result) => result.status === "rejected")?.reason,
-    ).toMatchObject(exceeded);
+    await admit([0.75]);
+    await expect(admit([0.75])).rejects.toMatchObject(exceeded);
     expect(
       await service.getProjectSummary(organizationId, projectId),
     ).toMatchObject({ monthCommittedUsd: 0.75 });

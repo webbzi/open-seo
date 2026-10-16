@@ -19,7 +19,7 @@ const STANDARD_MESSAGES: Record<ErrorCode, string> = {
   INSUFFICIENT_CREDITS:
     "You don't have enough credits for this. Upgrade your plan or buy more credits to keep going.",
   PROJECT_BUDGET_EXCEEDED:
-    "This project's DataForSEO allowance has been reached. Review API spending in project settings.",
+    "This project doesn't have enough DataForSEO allowance left for this request. Review API spending in project settings.",
   PROJECT_DATAFORSEO_PAUSED:
     "Paid DataForSEO usage is paused for this project. Resume it in project settings.",
   AUDIT_RENDERING_UNAVAILABLE:
