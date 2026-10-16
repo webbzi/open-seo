@@ -29,7 +29,6 @@ const APP_ERROR_CODE = {
   umami_not_configured: "NOT_FOUND",
   umami_not_connected: "NOT_FOUND",
   validation_error: "VALIDATION_ERROR",
-  project_forbidden: "FORBIDDEN",
 } as const satisfies Record<UmamiError["code"], ErrorCode>;
 
 /** The client sees only the AppError code; the Umami message stays in the

@@ -9,8 +9,7 @@ type UmamiErrorCode =
   // Adapter outcomes.
   | "umami_not_configured"
   | "umami_not_connected"
-  | "validation_error"
-  | "project_forbidden";
+  | "validation_error";
 
 const RETRYABLE_CODES: ReadonlySet<UmamiErrorCode> = new Set([
   "umami_rate_limited",
