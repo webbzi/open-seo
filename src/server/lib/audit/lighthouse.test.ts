@@ -11,6 +11,7 @@ vi.mock("@/server/lib/r2", () => ({
 }));
 
 import { fetchLighthouseResult, selectLighthouseSample } from "./lighthouse";
+import { AppError } from "@/server/lib/errors";
 
 const okPage = (url: string) => ({
   url,
@@ -86,6 +87,7 @@ describe("fetchLighthouseResult", () => {
     userId: "user-1",
     userEmail: "test@example.com",
     organizationId: "org-1",
+    projectId: "project-1",
   };
 
   it("does not retry an ambiguous generic failure", async () => {
@@ -120,4 +122,36 @@ describe("fetchLighthouseResult", () => {
     expect(live).toHaveBeenCalledOnce();
     expect(fetched.result.errorMessage).toBe("temporary failure");
   });
+
+  it.each([
+    [
+      "PROJECT_BUDGET_EXCEEDED",
+      "Skipped: this project's DataForSEO allowance is used up",
+    ],
+    [
+      "PROJECT_DATAFORSEO_PAUSED",
+      "Skipped: this project's DataForSEO paid usage is paused",
+    ],
+  ] as const)(
+    "records a %s refusal as a skipped check, not a provider error",
+    async (code, errorMessage) => {
+      createDataforseoClientMock.mockReturnValue({
+        lighthouse: { live: vi.fn().mockRejectedValue(new AppError(code)) },
+      });
+      const consoleError = vi.spyOn(console, "error");
+
+      const fetched = await fetchLighthouseResult(
+        "https://example.com/",
+        "page-1",
+        "desktop",
+        billingCustomer,
+      );
+
+      expect(fetched.result).toMatchObject({
+        performanceScore: null,
+        errorMessage,
+      });
+      expect(consoleError).not.toHaveBeenCalled();
+    },
+  );
 });

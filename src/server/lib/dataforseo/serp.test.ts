@@ -145,6 +145,24 @@ describe("rank check task queue", () => {
     ]);
   });
 
+  it("never replays a task_post on a 5xx (a retry could double-charge)", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("upstream error", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      postRankCheckTasks({
+        tasks: [{ keyword: "alpha", keywordId: "kw-1", device: "desktop" }],
+        locationCode: 2840,
+        languageCode: "en",
+        depth: 20,
+        targetDomain: "example.com",
+      }),
+    ).rejects.toMatchObject({ code: "UPSTREAM_UNAVAILABLE" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("reports a queued task still in progress as pending", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({

@@ -162,7 +162,8 @@ async function startAudit(input: {
           userId: input.billingCustomer.userId,
           userEmail: input.billingCustomer.userEmail,
           organizationId: input.billingCustomer.organizationId,
-          projectId: input.billingCustomer.projectId,
+          // The audit's own project: its paid Lighthouse checks spend there.
+          projectId: input.projectId,
         },
         projectId: input.projectId,
         startUrl,

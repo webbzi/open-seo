@@ -51,12 +51,13 @@ import type {
   LlmMentionItem,
   LlmTopPagesItem,
 } from "@/server/lib/dataforseoLlmSchemas";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
+import type { ProjectBillingCustomer } from "@/server/lib/dataforseo";
 
-const billingCustomer: BillingCustomerContext = {
+const billingCustomer: ProjectBillingCustomer = {
   organizationId: "org_123",
   userId: "user_123",
   userEmail: "alice@example.com",
+  projectId: "project_123",
 };
 
 // A previously cached result for the same target, built through the real

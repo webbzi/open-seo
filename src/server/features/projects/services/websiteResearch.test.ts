@@ -4,6 +4,9 @@ const {
   generateText,
   readSite,
   search,
+  meteredSearch,
+  createDataforseoClient,
+  isHostedServerAuthMode,
   listSections,
   listCompetitors,
   listKeywords,
@@ -11,6 +14,9 @@ const {
   generateText: vi.fn(),
   readSite: vi.fn(),
   search: vi.fn(),
+  meteredSearch: vi.fn(),
+  createDataforseoClient: vi.fn(),
+  isHostedServerAuthMode: vi.fn(),
   listSections: vi.fn(),
   listCompetitors: vi.fn(),
   listKeywords: vi.fn(),
@@ -23,9 +29,11 @@ vi.mock("ai", () => ({
 }));
 vi.mock("@/server/lib/scrape", () => ({ readSite }));
 vi.mock("@/server/lib/dataforseo/serp", () => ({ fetchLiveSerp: search }));
+vi.mock("@/server/lib/dataforseo/client", () => ({ createDataforseoClient }));
 vi.mock("@/server/lib/runtime-env", () => ({
   getRequiredEnvValue: vi.fn(),
   getOptionalEnvValue: vi.fn(),
+  isHostedServerAuthMode,
 }));
 vi.mock("@/server/lib/openrouter", () => ({ buildChatAgentModel: vi.fn() }));
 vi.mock("@/server/lib/chatAgent", () => ({
@@ -90,6 +98,9 @@ beforeEach(() => {
   listKeywords.mockResolvedValue(["saved keyword"]);
   readSite.mockResolvedValue({ pages: [{ url: competitor.sourceUrl }] });
   search.mockResolvedValue({ billing: { costUsd: 0.002 }, data: [] });
+  isHostedServerAuthMode.mockResolvedValue(true);
+  createDataforseoClient.mockReturnValue({ serp: { live: meteredSearch } });
+  meteredSearch.mockResolvedValue([]);
   generateText.mockImplementation(
     async ({ tools }: { tools?: ResearchTools }) => {
       if (tools) {
@@ -207,5 +218,42 @@ describe("researchWebsite", () => {
       researchWebsite("https://saved.com", project, customer),
     ).rejects.toThrow("Website research was incomplete");
     expect(search).toHaveBeenCalledOnce();
+  });
+
+  it("self-hosted: searches through the project's metered client", async () => {
+    isHostedServerAuthMode.mockResolvedValue(false);
+    listCompetitors.mockResolvedValue([]);
+
+    const result = await researchWebsite(
+      "https://saved.com",
+      project,
+      customer,
+    );
+
+    expect(result.competitors).toEqual([competitor]);
+    expect(createDataforseoClient).toHaveBeenCalledWith(customer);
+    expect(meteredSearch).toHaveBeenCalledExactlyOnceWith({
+      keyword: "business competitors",
+      locationCode: project.locationCode,
+      languageCode: project.languageCode,
+      depth: 10,
+      creditFeature: "keyword_research",
+    });
+    expect(search).not.toHaveBeenCalled();
+  });
+
+  it("self-hosted: skips competitors after a budget refusal, without retrying it", async () => {
+    isHostedServerAuthMode.mockResolvedValue(false);
+    listCompetitors.mockResolvedValue([]);
+    meteredSearch.mockRejectedValue(new AppError("PROJECT_BUDGET_EXCEEDED"));
+
+    const result = await researchWebsite(
+      "https://saved.com",
+      project,
+      customer,
+    );
+
+    expect(meteredSearch).toHaveBeenCalledOnce();
+    expect(result.competitors).toEqual([]);
   });
 });

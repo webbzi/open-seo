@@ -108,6 +108,34 @@ describe("instrumentMcpToolHandler", () => {
     );
   });
 
+  it.each([
+    [
+      "PROJECT_BUDGET_EXCEEDED",
+      "until the limit is raised in the project's API spending settings",
+    ],
+    ["PROJECT_DATAFORSEO_PAUSED", "until paid usage resumes"],
+  ] as const)(
+    "tells the agent why retrying won't help after a %s refusal",
+    async (code, until) => {
+      const wrapped = instrumentMcpToolHandler(
+        "demo",
+        outputSchema,
+        async () => {
+          throw new AppError(code);
+        },
+      );
+
+      const error: unknown = await wrapped({}, toolContext).catch(
+        (rejection: unknown) => rejection,
+      );
+      expect(error).toMatchObject({ code });
+      expect(error).toHaveProperty(
+        "message",
+        expect.stringContaining(`won't help ${until}`),
+      );
+    },
+  );
+
   it("captures a usage event and the activation milestone for a successful external call", async () => {
     const wrapped = instrumentMcpToolHandler("demo", outputSchema, async () =>
       okResult({ items: [{ domain: "example.com" }] }),

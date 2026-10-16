@@ -110,6 +110,7 @@ describe("explorePrompt web-search retry", () => {
     organizationId: "org_1",
     userId: "user_1",
     userEmail: "a@b.c",
+    projectId: "project_1",
   };
 
   it("retries once when search was requested but the model answered from memory", async () => {
@@ -155,6 +156,7 @@ describe("Prompt Explorer countries", () => {
     organizationId: "org_1",
     userId: "user_1",
     userEmail: "a@b.c",
+    projectId: "project_1",
   };
   const input = {
     projectId: "p1",

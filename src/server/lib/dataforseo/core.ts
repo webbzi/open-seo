@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@/server/lib/errors";
 import { getRequiredEnvValue } from "@/server/lib/runtime-env";
 import type { ErrorCode } from "@/shared/error-codes";
@@ -29,6 +30,24 @@ export type DataforseoErrorClassifier = (
   details: string,
   path: string,
 ) => AppError | null;
+
+/**
+ * What DataForSEO saw of one metered call: `sent` once a request left this
+ * Worker, `status` the HTTP status answering the latest attempt (null until
+ * one arrives). The project ledger reads it to prove a failed call unbilled:
+ * nothing sent, or an HTTP 4xx refusal.
+ */
+export type DataforseoDispatch = { sent: boolean; status: number | null };
+
+const dispatchStore = new AsyncLocalStorage<DataforseoDispatch>();
+
+/** Runs one metered call, recording its requests into `dispatch`. */
+export function trackDataforseoDispatch<T>(
+  dispatch: DataforseoDispatch,
+  run: () => Promise<T>,
+): Promise<T> {
+  return dispatchStore.run(dispatch, run);
+}
 
 function formatDataforseoErrorPayload(value: unknown): string {
   const text =
@@ -74,9 +93,14 @@ function createAuthenticatedFetch(
     // rather than restarting a fresh 60s budget on each attempt.
     const signal =
       init?.signal ?? AbortSignal.timeout(DATAFORSEO_REQUEST_TIMEOUT_MS);
+    const dispatch = dispatchStore.getStore();
 
     for (let attempt = 0; ; attempt++) {
       let response: Response;
+      if (dispatch) {
+        dispatch.sent = true;
+        dispatch.status = null;
+      }
       try {
         response = await fetch(url, { ...init, headers, signal });
       } catch (error) {
@@ -104,6 +128,7 @@ function createAuthenticatedFetch(
         }
         throw error;
       }
+      if (dispatch) dispatch.status = response.status;
       if (response.ok) return response;
 
       // Transient upstream 5xx on an idempotent read -> back off and retry.

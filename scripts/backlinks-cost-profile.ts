@@ -1,6 +1,6 @@
 import process from "node:process";
 import { createBacklinksService } from "@/server/features/backlinks/services/BacklinksService";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
+import type { ProjectBillingCustomer } from "@/server/lib/dataforseo";
 import type {
   BacklinksLookupInput,
   BacklinksTargetScope,
@@ -125,13 +125,20 @@ function buildInput(cliArgs: Record<string, string>): BacklinksLookupInput {
   };
 }
 
+// Self-hosted spend is metered on a project's budget, so the live calls need
+// the project they are attributed to.
 function buildBillingCustomer(
   cliArgs: Record<string, string>,
-): BillingCustomerContext {
+): ProjectBillingCustomer {
+  const projectId = cliArgs.projectId;
+  if (!projectId) {
+    printUsageAndExit("Missing projectId.");
+  }
   return {
     organizationId: cliArgs.organizationId ?? "local",
     userId: cliArgs.userId ?? "local-user",
     userEmail: cliArgs.userEmail ?? "local@example.com",
+    projectId,
   };
 }
 
@@ -160,7 +167,7 @@ function parsePositiveInteger(value: string | undefined, fallback: number) {
 function printUsageAndExit(message: string): never {
   console.error(message);
   console.error(
-    "Usage: pnpm billing:backlinks --target=example.com --confirmLive=true [--scope=domain|subdomains|exact_url] [--repeat=1] [--includeTabs=true|false] [--allowCi=true]",
+    "Usage: pnpm billing:backlinks --target=example.com --projectId=<project id> --confirmLive=true [--organizationId=<org id>] [--scope=domain|subdomains|exact_url] [--repeat=1] [--includeTabs=true|false] [--allowCi=true]",
   );
   process.exit(1);
 }

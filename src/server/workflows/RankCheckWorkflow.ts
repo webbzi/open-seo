@@ -5,7 +5,6 @@ import {
 } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { withPgClient } from "@/db";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
 import { failRunIfActive } from "@/server/features/rank-tracking/services/rankCheckRunGuards";
 import {
@@ -14,7 +13,10 @@ import {
   type QueuedCheckStats,
 } from "@/server/workflows/rankCheckPaths";
 import { pgStep } from "@/server/workflows/pgStep";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
+import {
+  createDataforseoClient,
+  type ProjectBillingCustomer,
+} from "@/server/lib/dataforseo";
 import { captureServerEvent } from "@/server/lib/posthog";
 import { AppError } from "@/server/lib/errors";
 import { autumn } from "@/server/billing/autumn";
@@ -36,7 +38,7 @@ const SINGLE_ATTEMPT_STEP_CONFIG = {
 interface RankCheckParams {
   runId: string;
   configId: string;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   projectId: string;
   domain: string;
   locationCode: number;
@@ -52,7 +54,7 @@ interface RankCheckParams {
 async function prepareRankCheckKeywords(input: {
   runId: string;
   configId: string;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   devices: RankCheckParams["devices"];
   serpDepth: number;
   trigger: RankCheckParams["trigger"];
@@ -139,7 +141,7 @@ async function finalizeRankCheckRun(input: {
   runId: string;
   configId: string;
   projectId: string;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   trigger: RankCheckParams["trigger"];
   devices: RankCheckParams["devices"];
   batchError: string | null;
@@ -256,7 +258,7 @@ async function markRankCheckRunFailed(input: {
   runId: string;
   configId: string;
   projectId: string;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   error: unknown;
 }) {
   const errorMessage =

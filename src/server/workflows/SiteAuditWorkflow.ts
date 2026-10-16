@@ -10,7 +10,7 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers";
 import { withPgClient } from "@/db";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
+import type { ProjectBillingCustomer } from "@/server/lib/dataforseo";
 import { AuditRepository } from "@/server/features/audit/repositories/AuditRepository";
 import {
   CrawlerCredentialService,
@@ -33,7 +33,7 @@ import type { RenderUsage } from "@/shared/audit-rendering";
 
 interface AuditParams {
   auditId: string;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   projectId: string;
   startUrl: string;
   config: AuditConfig;

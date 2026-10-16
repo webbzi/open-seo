@@ -1,6 +1,8 @@
-import type { BillingCustomerContext } from "@/server/billing/subscription";
 import type { CreditFeature } from "@/shared/billing-credit-features";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
+import {
+  createDataforseoClient,
+  type ProjectBillingCustomer,
+} from "@/server/lib/dataforseo";
 import { fetchAdsSearchVolumeForKeywords } from "@/server/lib/dataforseo/keyword-metrics";
 import { fetchSerpLocationsForCountry } from "@/server/lib/dataforseo/serp-locations";
 import { AppError } from "@/server/lib/errors";
@@ -52,7 +54,7 @@ export async function localizeResearchRows(
     languageCode: string;
     creditFeature?: CreditFeature;
   },
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<EnrichedKeyword[]> {
   // Research results cap at 500 rows, under the endpoint's 1,000 keyword
   // limit, so one call covers them.

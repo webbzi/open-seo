@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
+import type { ProjectBillingCustomer } from "@/server/lib/dataforseo";
 
 const mocks = vi.hoisted(() => ({
   assertLocalResearchLocation: vi.fn(async () => {}),
@@ -28,10 +28,11 @@ vi.mock("@/server/lib/dataforseo", () => ({
 
 import { getSerpAnalysis } from "./serp";
 
-const billingCustomer: BillingCustomerContext = {
+const billingCustomer: ProjectBillingCustomer = {
   organizationId: "org_1",
   userId: "user_1",
   userEmail: "alice@example.com",
+  projectId: "project_1",
 };
 
 const input = {

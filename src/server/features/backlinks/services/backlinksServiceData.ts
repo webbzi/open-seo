@@ -1,8 +1,8 @@
 import { z } from "zod";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
 import type { CreditFeature } from "@/shared/billing-credit-features";
 import {
   createDataforseoClient,
+  type ProjectBillingCustomer,
   normalizeBacklinksTarget,
   type BacklinksHistoryItem,
   type BacklinksSummaryItem,
@@ -82,7 +82,7 @@ export async function profileBacklinksOverview(
   cache: BacklinksCache,
   cacheKey: string,
   input: BacklinksLookupInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   creditFeature?: CreditFeature,
 ): Promise<{ overview: BacklinksOverviewResult }> {
   const cached = backlinksOverviewCacheSchema.safeParse(
@@ -156,7 +156,7 @@ export async function profileBacklinksRowsPage(
   cache: BacklinksCache,
   cacheKey: string,
   input: BacklinksRowsPageServiceInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   spamOptions?: BacklinksSpamFilterOptions,
 ): Promise<BacklinksRowsPageResult> {
   const cached = backlinksRowsPageResultSchema.safeParse(
@@ -205,7 +205,7 @@ export async function profileReferringDomainsPage(
   cache: BacklinksCache,
   cacheKey: string,
   input: ReferringDomainsPageServiceInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   spamOptions?: BacklinksSpamFilterOptions,
 ): Promise<ReferringDomainsPageResult> {
   const cached = referringDomainsPageResultSchema.safeParse(
@@ -253,7 +253,7 @@ export async function profileTopPagesPage(
   cache: BacklinksCache,
   cacheKey: string,
   input: TopPagesPageServiceInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<TopPagesPageResult> {
   const cached = topPagesPageResultSchema.safeParse(await cache.get(cacheKey));
   if (cached.success) {

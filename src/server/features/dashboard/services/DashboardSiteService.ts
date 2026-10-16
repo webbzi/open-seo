@@ -1,10 +1,10 @@
 import { sort } from "remeda";
 import { z } from "zod";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
 import { DashboardCacheService } from "./DashboardCacheService";
 import {
   createDataforseoClient,
   normalizeBacklinksTarget,
+  type ProjectBillingCustomer,
 } from "@/server/lib/dataforseo";
 import { mapBacklinksRows } from "@/server/features/backlinks/services/backlinksRowMappers";
 import {
@@ -36,7 +36,7 @@ const queriesSchema = z.object({
 
 async function getBacklinks(
   input: { domain: string; kind: "new" | "lost" | "all" },
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ) {
   const result = await DashboardCacheService.readThrough({
     namespace: "dashboard:links",
@@ -280,7 +280,7 @@ async function getEmergingQueries(projectId: string, organizationId: string) {
 
 async function getLinkActivity(
   domain: string,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ) {
   const target = normalizeBacklinksTarget(domain, {
     scope: "subdomains",

@@ -1,7 +1,9 @@
 import { waitUntil } from "cloudflare:workers";
 import { identity, sortBy } from "remeda";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
+import {
+  createDataforseoClient,
+  type ProjectBillingCustomer,
+} from "@/server/lib/dataforseo";
 import {
   buildLlmTarget,
   CHATGPT_LANGUAGE_CODE,
@@ -51,7 +53,7 @@ const TOP_SOURCES_PER_PLATFORM = 10;
 
 export async function getBrandLookup(
   input: BrandLookupInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<BrandLookupResult> {
   const detected = detectTarget(input.query);
   const researchTarget = resolveResearchTarget(input, detected);

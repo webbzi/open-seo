@@ -2,12 +2,12 @@ import { waitUntil } from "cloudflare:workers";
 import { sortBy } from "remeda";
 import { getDomain } from "tldts";
 import { z } from "zod";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
 import { assertPaidAiSearchPlan } from "@/server/features/ai-search/services/access";
 import {
   CHATGPT_LANGUAGE_CODE,
   CHATGPT_LOCATION_CODE,
   createDataforseoClient,
+  type ProjectBillingCustomer,
 } from "@/server/lib/dataforseo";
 import { AppError } from "@/server/lib/errors";
 import { buildCacheKey, getCached, setCached } from "@/server/lib/r2-cache";
@@ -97,7 +97,7 @@ export async function listAiResearchKeywords(input: {
 
 export async function researchAiPrompts(
   input: ResearchAiPromptsInput,
-  customer: BillingCustomerContext,
+  customer: ProjectBillingCustomer,
 ): Promise<AiPromptResearchResult> {
   await assertPaidAiSearchPlan(customer.organizationId, "Prompt Research");
   const state = await getTracker({ projectId: input.projectId });
@@ -160,7 +160,7 @@ async function loadPrompts(
     locationCode: number;
     languageCode: string;
   },
-  customer: BillingCustomerContext,
+  customer: ProjectBillingCustomer,
 ): Promise<CachedResearch> {
   const cacheKey = await buildCacheKey("ai-visibility:prompt-research", {
     organizationId: customer.organizationId,
