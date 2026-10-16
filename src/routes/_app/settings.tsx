@@ -9,14 +9,16 @@ export const Route = createFileRoute("/_app/settings")({
 
 // Account-level settings, tabbed like project settings. Personal = the
 // signed-in user (theme, API keys, analytics); Organization = the active org
-// (team). Billing keeps its own page — it's linked from paywalls all over.
+// (team); API spending = DataForSEO spend across the org's projects.
+// Billing keeps its own page — it's linked from paywalls all over.
 function SettingsLayout() {
   const tabs = [
     { to: "/settings" as const, label: "Personal", exact: true },
-    // Self-host has no memberships — the organization tab would 404.
+    // Self-host has no memberships, so the organization tab would 404. Hosted
+    // bills through credits, so it has no per-project API spending.
     ...(isHostedClientAuthMode()
       ? [{ to: "/settings/organization" as const, label: "Organization" }]
-      : []),
+      : [{ to: "/settings/api-spending" as const, label: "API spending" }]),
   ];
 
   return (
