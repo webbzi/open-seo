@@ -77,3 +77,10 @@ export function getStepStatus(
     return "skipped";
   return "todo";
 }
+
+/** The GA4 card shows when connected, or as the connect pitch until it is
+ *  dismissed. A project on Umami without GA4 doesn't get the pitch. */
+export function showGa4Card(activation: DashboardActivation): boolean {
+  if (activation.ga4.connected) return true;
+  return !activation.ga4.cardDismissedAt && !activation.umami.connected;
+}

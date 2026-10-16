@@ -16,6 +16,9 @@ vi.mock(
 vi.mock("@/server/features/ga4/repositories/Ga4ConnectionRepository", () => ({
   Ga4ConnectionRepository: {},
 }));
+vi.mock("@/server/features/umami/services/UmamiService", () => ({
+  UmamiService: {},
+}));
 vi.mock("@/server/features/gsc/repositories/GscConnectionRepository", () => ({
   GscConnectionRepository: {},
 }));

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { waitUntil } from "cloudflare:workers";
 import { z } from "zod";
 import { UmamiService } from "@/server/features/umami/services/UmamiService";
+import { UmamiReportService } from "@/server/features/umami/services/UmamiReportService";
 import { AppError } from "@/server/lib/errors";
 import { UmamiError } from "@/server/lib/umamiErrors";
 import { hasOrgPermission } from "@/lib/org-permissions";
@@ -53,6 +54,48 @@ export const getUmamiConnection = createServerFn({ method: "POST" })
     })),
     canManage: hasOrgPermission(context.role, { integration: ["manage"] }),
   }));
+
+const NOT_CONNECTED_CODES = [
+  "umami_not_configured",
+  "umami_not_connected",
+  "umami_website_not_found",
+  "umami_unauthorized",
+] as const;
+type NotConnectedCode = (typeof NOT_CONNECTED_CODES)[number];
+
+function isNotConnectedCode(
+  code: UmamiError["code"],
+): code is NotConnectedCode {
+  return (NOT_CONNECTED_CODES as readonly string[]).includes(code);
+}
+
+/** The dashboard's Umami card: totals vs the previous period over the default
+ *  (last 28 complete days) range. */
+export const getUmamiDashboardReport = createServerFn({ method: "POST" })
+  .middleware(requireProjectContext)
+  .validator(projectScopedSchema)
+  .handler(async ({ context }) => {
+    try {
+      const report = await UmamiReportService.getOverview({
+        projectId: context.projectId,
+        organizationId: context.organizationId,
+      });
+      return { connected: true as const, report };
+    } catch (error) {
+      if (error instanceof UmamiError) {
+        // Missing config, connection, website or access: the card explains
+        // and links to Integrations instead of retrying a call that can't work.
+        if (isNotConnectedCode(error.code)) {
+          return { connected: false as const, reason: error.code };
+        }
+        // An external, transient condition, not an app fault.
+        if (error.code === "umami_rate_limited") {
+          throw new AppError("RATE_LIMITED");
+        }
+      }
+      throw error;
+    }
+  });
 
 export const listUmamiWebsites = createServerFn({ method: "POST" })
   .middleware(requireProjectContext)
