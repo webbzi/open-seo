@@ -107,6 +107,10 @@ import {
   deleteSiteAuditTool,
   listSiteAuditsTool,
 } from "@/server/mcp/tools/site-audit-cleanup-tools";
+import {
+  getUmamiBreakdownTool,
+  getUmamiOverviewTool,
+} from "@/server/mcp/tools/umami-tools";
 import { whoamiTool } from "@/server/mcp/tools/whoami";
 import { explorePromptTool } from "@/server/mcp/tools/explore-prompt";
 
@@ -262,6 +266,11 @@ export function createOpenSeoMcpServer(authProps: McpProps) {
   register(getGoogleAnalyticsEcommercePerformanceTool);
   register(getGoogleAnalyticsSiteSearchTool);
   register(getGoogleAnalyticsAudienceBreakdownTool);
+  // Registered unconditionally: Umami config is only readable asynchronously
+  // and this factory is synchronous. Unconfigured deployments get an
+  // umami_not_configured error envelope from the tools instead.
+  register(getUmamiOverviewTool);
+  register(getUmamiBreakdownTool);
   register(runSiteAuditTool);
   register(listSiteAuditsTool);
   register(deleteSiteAuditTool);
