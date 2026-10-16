@@ -18,6 +18,10 @@ const STANDARD_MESSAGES: Record<ErrorCode, string> = {
     "An active hosted subscription is required before you can use OpenSEO.",
   INSUFFICIENT_CREDITS:
     "You don't have enough credits for this. Upgrade your plan or buy more credits to keep going.",
+  PROJECT_BUDGET_EXCEEDED:
+    "This project's DataForSEO allowance has been reached. Review API spending in project settings.",
+  PROJECT_DATAFORSEO_PAUSED:
+    "Paid DataForSEO usage is paused for this project. Resume it in project settings.",
   AUDIT_RENDERING_UNAVAILABLE:
     "JavaScript rendering is not configured on this deployment. Ask your administrator to enable a renderer.",
   FORBIDDEN: "You do not have access to this resource.",
