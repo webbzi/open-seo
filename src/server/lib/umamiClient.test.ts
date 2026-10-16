@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { listWebsites } from "./umamiClient";
+import { getWebsite, listWebsites } from "./umamiClient";
 
 const config = {
   baseUrl: "https://umami.example.com",
@@ -85,5 +85,15 @@ describe("listWebsites", () => {
 
     expect(error).toMatchObject({ name: "UmamiError", ...expected });
     expect(String(error)).not.toMatch(/umami\.example\.com|umami_test-key/);
+  });
+});
+
+describe("getWebsite", () => {
+  it("does not read an HTML 200 as a deleted website", async () => {
+    fetchMock.mockResolvedValue(new Response("<html>login</html>"));
+
+    await expect(getWebsite(config, website(1).id)).rejects.toMatchObject({
+      code: "umami_malformed_response",
+    });
   });
 });

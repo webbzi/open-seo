@@ -35,8 +35,9 @@ must be an account API key (the `umami_` prefix): a login token would expire
 and is not supported.
 
 Umami is "configured" only when both values are present and valid. An
-unconfigured deployment, which includes hosted OpenSEO, registers no Umami MCP
-tools and shows no Umami dashboard card. The Integrations page shows one line
+unconfigured deployment, which includes hosted OpenSEO, shows no Umami
+dashboard card, and its Umami MCP tools answer `umami_not_configured`. The
+Integrations page shows one line
 of setup guidance with a link to the self-hosting guide. The Docker preflight
 and the health endpoint apply the same validation and warn when only one value
 is set or a value is invalid.
@@ -102,15 +103,16 @@ Zod. Errors map to stable codes:
 | 2xx failing validation      | `umami_malformed_response`   | no                    |
 
 Adapter-level codes are `umami_not_configured`, `umami_not_connected` (with
-the Integrations URL), `validation_error` and `project_forbidden`. Messages
+the Integrations URL) and `validation_error`. Messages
 never carry the key, the raw upstream body or the instance URL. In the app,
 these codes become the standard client error codes; a rejected key gets its
 own code so the operator sees which variable to check.
 
 A single website lookup treats a `null` body or a website with a deletion
 date as `umami_website_not_found`: Umami answers an admin key that way for an
-unknown or deleted website. Website ids are validated as UUIDs before any
-request, because Umami answers a malformed id with a bodiless 500.
+unknown or deleted website. A 2xx body that is not JSON is
+`umami_malformed_response`, never a `null` body. Website ids are validated as
+UUIDs before any request, because Umami answers a malformed id with a bodiless 500.
 
 ### Reports
 
@@ -120,20 +122,27 @@ over the equal-length window before the current one, not Umami's
 `compare=prev`, so it stays exact across DST changes. The daily trend comes
 from `/pageviews` with `unit=day` and the connection's `timezone`; Umami
 omits days without data and labels each bucket with its local date, so the
-service fills missing days with zero. Umami applies no threshold, which makes
-that truthful. Rates are `null` when their denominator is 0, and a percent
-change is `null` when the previous value is 0 or absent. The channel mix is
-`/metrics?type=channel` (visits per Umami channel key, such as
-`organicSearch`, `direct` or `paidAds`).
+service fills missing days with zero. Zero-fill applies only to these daily
+buckets. Its per-day count is `visitors` (Umami counts distinct sessions), not
+visits. Umami silently replaces `unit=day` with months once a range spans more
+than about seven calendar months, so for ranges over 184 days the service
+skips `/pageviews`, returns an empty trend and adds the
+`trend_omitted_range_too_long` warning; totals, comparison and channels are
+kept. Rates are `null` when their denominator is 0, and a percent change is
+`null` when the previous value is 0 or absent. The channel mix comes from
+`/metrics/expanded?type=channel` and reports real visits per Umami channel key,
+such as `organicSearch`, `direct` or `paidAds`.
 
 Breakdowns read `/metrics/expanded`, fetching one row beyond the page size to
 set `hasMore`, because Umami returns no total. Umami hard-codes `bounces` and
 `totaltime` to 0 for page-level types, so those two columns are `null` for
 `page`, `landing_page`, `exit_page`, `page_title`, `referrer_domain`,
 `utm_source`, `utm_medium`, `utm_campaign` and `hostname`. They are real
-values for `channel`, `country`, `device`, `browser`, `os`, `language` and
-`event`. Pageviews, visitors and visits are always real. Counts may arrive as
-strings and are coerced.
+values for `channel`, `country`, `device`, `browser`, `os` and `language`.
+They are `null` for `event` too, because Umami reuses the fields there:
+event occurrences are reported as pageviews, single-event visits as bounces
+and the occurrence span as total time. For `event`, the pageviews column
+counts event occurrences. Counts may arrive as strings and are coerced.
 
 `search_engines` sends the filter `referrer=re.(<search domains>)` over
 Umami's own search-engine domain list. Umami matches the filter against each
@@ -145,8 +154,9 @@ without `www.`.
 
 ### MCP tools
 
-Two read-only, project-scoped tools are registered only when Umami is
-configured:
+Two read-only, project-scoped tools are registered unconditionally; on a
+deployment without Umami they answer `umami_not_configured` with the
+Integrations URL:
 
 - `get_umami_overview`: totals with Umami's previous-period comparison, a
   daily trend and the channel mix.
@@ -193,8 +203,8 @@ zones. Capturing the selecting member's zone is explicit and editable.
 - Every organization on the deployment can map any website the key can read,
   gated only by `integration: manage`. The operator limits this by issuing the
   key from a dedicated non-admin Umami user that sees only the intended
-  websites; the self-hosting guide says so. An admin key is also unsuitable
-  because it reports zeroed statistics for deleted websites.
+  websites; the self-hosting guide says so. The reason is least privilege: an
+  admin key can read and delete every website on the instance.
 - Umami older than v3.4 and Umami Cloud are unsupported.
 - Organic search is approximated by referrer, because Umami cannot filter by
   channel.

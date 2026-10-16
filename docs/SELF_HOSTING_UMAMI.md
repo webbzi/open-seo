@@ -24,9 +24,9 @@ connect any of those websites to their projects. A dedicated user lets you
 decide exactly which websites OpenSEO exposes, and lets you revoke OpenSEO's
 access without touching anyone's own login.
 
-An admin key is also unsafe for a second reason: it reports all-zero
-statistics for a deleted website instead of an error, so a removed website
-would look like a website with no traffic.
+An admin key would give OpenSEO more than it needs: it can read and delete
+every website on the instance. Least privilege is the reason to use a
+dedicated, non-admin user.
 
 ## 2) Give the user its websites
 

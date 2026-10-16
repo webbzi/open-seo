@@ -26,7 +26,9 @@ import { buildDashboardUrl } from "@/server/mcp/urls";
 const dateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .describe("Inclusive YYYY-MM-DD date. Provide both startDate and endDate.");
+  .describe(
+    "Inclusive YYYY-MM-DD date. Provide both startDate and endDate, or neither. Default: the last 28 complete days, ending yesterday in the project's Umami time zone.",
+  );
 
 const errorDetailSchema = z
   .object({
@@ -103,8 +105,6 @@ const annotations = {
   destructiveHint: false,
 };
 
-const VALIDATION_MESSAGE = "The request was invalid for this Umami website.";
-
 function errorResponse(
   args: { projectId: string },
   context: ProjectContext,
@@ -119,9 +119,6 @@ function errorResponse(
     message = error.message;
     retryable = error.retryable;
     retryAfterSeconds = error.retryAfterSeconds;
-  } else if (error instanceof RangeError || error instanceof z.ZodError) {
-    code = "validation_error";
-    message = VALIDATION_MESSAGE;
   } else {
     throw error;
   }
@@ -146,8 +143,22 @@ function sourceLine(source: UmamiReportSource) {
   return `Website: ${source.websiteName} (${source.websiteDomain ?? "no domain"}, ${source.websiteId})`;
 }
 
+const WARNING_EXPLANATIONS: Record<string, string> = {
+  end_date_clamped:
+    "endDate was today or later, so it was moved to yesterday (the last complete day).",
+  search_engine_referrer_approximation:
+    "Counts landings whose referrer is a search engine, including paid-search clicks, so it can exceed the overview's organicSearch channel.",
+  trend_omitted_range_too_long:
+    "The range is longer than 184 days, so the daily trend is left out (Umami would switch to monthly buckets); totals, comparison and channels are unaffected.",
+};
+
 function warningsLine(warnings: readonly string[]) {
-  return warnings.length > 0 ? `\nWarnings: ${warnings.join(", ")}` : "";
+  if (warnings.length === 0) return "";
+  const lines = warnings.map(
+    (code) =>
+      `- ${code}${WARNING_EXPLANATIONS[code] ? `: ${WARNING_EXPLANATIONS[code]}` : ""}`,
+  );
+  return `\nWarnings:\n${lines.join("\n")}`;
 }
 
 function headerText(
@@ -188,7 +199,7 @@ function overviewText(result: UmamiOverview): string {
   const trend = formatMcpTable(result.trend, [
     { header: "date", value: (row) => row.date },
     { header: "pageviews", value: (row) => row.pageviews },
-    { header: "visits", value: (row) => row.visits },
+    { header: "visitors", value: (row) => row.visitors },
   ]);
   const channels =
     result.channels.length === 0
@@ -261,7 +272,11 @@ const breakdownInputSchema = z.strictObject({
   projectId: projectIdSchema,
   startDate: dateSchema.optional(),
   endDate: dateSchema.optional(),
-  dimension: z.enum(UMAMI_BREAKDOWN_DIMENSIONS),
+  dimension: z
+    .enum(UMAMI_BREAKDOWN_DIMENSIONS)
+    .describe(
+      "What to group by: page (any viewed path), landing_page (first page of a visit), exit_page, referrer_domain, channel, country, device, utm_* and so on. For event, the pageviews column counts event occurrences.",
+    ),
   trafficSource: z.enum(UMAMI_TRAFFIC_SOURCES).optional().default("all"),
   limit: z.number().int().min(1).max(1_000).optional().default(100),
   offset: z.number().int().min(0).optional().default(0),
@@ -272,7 +287,7 @@ export const getUmamiBreakdownTool = {
   name: "get_umami_breakdown",
   config: {
     title: "Get Umami breakdown",
-    description: `Break Umami traffic down by one dimension (page, landing page, referrer domain, channel, country, device, UTM and more) with pageviews, visitors, visits, bounces and time on site. trafficSource=search_engines works only with dimension=landing_page: it counts landings whose referrer is a search engine, including paid-search clicks. A metric Umami does not compute for a dimension is null. ${ACCESS_DESCRIPTION}`,
+    description: `Break Umami traffic down by one dimension (page, landing page, referrer domain, channel, country, device, UTM and more) with pageviews, visitors, visits, bounces and time on site. trafficSource=search_engines works only with dimension=landing_page: it counts landings whose referrer is a search engine, including paid-search clicks. A metric Umami does not compute for a dimension is null. For dimension=event, the pageviews column counts event occurrences. ${ACCESS_DESCRIPTION}`,
     inputSchema: breakdownInputSchema,
     outputSchema: breakdownOutputSchema,
     annotations,

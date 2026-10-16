@@ -7,7 +7,6 @@ import {
   type ResolvedUmamiDateRange,
 } from "@/server/features/umami/services/umamiDates";
 import {
-  getChannelVisits,
   getDailyPageviews,
   getExpandedMetrics,
   getStats,
@@ -85,8 +84,10 @@ export type UmamiOverview = {
   current: UmamiTotals;
   previous: UmamiTotals;
   comparison: Record<keyof UmamiTotals, UmamiMetricChange>;
-  /** One row per local day of the resolved range, oldest first, zero-filled. */
-  trend: Array<{ date: string; pageviews: number; visits: number }>;
+  /** One row per local day of the resolved range, oldest first, zero-filled.
+   *  Empty when the range is too long for daily buckets
+   *  (`trend_omitted_range_too_long`). */
+  trend: Array<{ date: string; pageviews: number; visitors: number }>;
   /** Umami channel keys (organicSearch, direct, referral, paidAds, ...),
    *  visits descending. */
   channels: Array<{ channel: string; visits: number }>;
@@ -126,11 +127,14 @@ export type UmamiBreakdown = {
 };
 
 const MAX_BREAKDOWN_LIMIT = 1_000;
+const MAX_TREND_DAYS = 184;
 
 /** Umami's `type` for each dimension, and whether Umami computes bounces and
  *  total time for it. Verified on Umami 3.4: page-level types hard-code both
- *  to 0, so they are null; session types and `event` are real. The utm types
- *  are camelCase in Umami's API. */
+ *  to 0, so they are null; session types are real. `event` is false too: Umami
+ *  reports event occurrences as pageviews, single-event visits as bounces and
+ *  the occurrence span as totaltime. The utm types are camelCase in Umami's
+ *  API. */
 const DIMENSIONS: Record<
   UmamiBreakdownDimension,
   { type: UmamiMetricType; engagement: boolean }
@@ -146,7 +150,7 @@ const DIMENSIONS: Record<
   browser: { type: "browser", engagement: true },
   os: { type: "os", engagement: true },
   language: { type: "language", engagement: true },
-  event: { type: "event", engagement: true },
+  event: { type: "event", engagement: false },
   utm_source: { type: "utmSource", engagement: false },
   utm_medium: { type: "utmMedium", engagement: false },
   utm_campaign: { type: "utmCampaign", engagement: false },
@@ -204,10 +208,11 @@ function resolveRange(input: DateInput, timeZone: string) {
 }
 
 /** Resolves config, connection and dates, then confirms the website still
- *  exists: an admin key gets zeroed stats for a deleted one. */
+ *  exists: Umami answers zeroed stats for a deleted one. */
 async function prepare(input: ProjectScope & DateInput) {
   const { config, connection } = await requireConnected(input);
   const range = resolveRange(input, connection.timeZone);
+  await getWebsite(config, connection.websiteId);
   return { config, connection, range };
 }
 
@@ -290,20 +295,21 @@ function compareTotals(
 const byLocalDate = (series: Array<{ x: string; y: number }>) =>
   new Map(series.map(({ x, y }) => [x.slice(0, 10), y]));
 
-/** Umami omits days without data; its `x` buckets start with the local date. */
+/** Zero-fills daily buckets only: Umami omits days without data, and its `x`
+ *  buckets start with the local date. */
 function zeroFilledTrend(
   range: ResolvedUmamiDateRange,
   pageviews: Array<{ x: string; y: number }>,
-  visits: Array<{ x: string; y: number }>,
+  visitors: Array<{ x: string; y: number }>,
 ) {
   const pageviewsByDate = byLocalDate(pageviews);
-  const visitsByDate = byLocalDate(visits);
+  const visitorsByDate = byLocalDate(visitors);
   return Array.from({ length: range.dayCount }, (_, index) => {
     const date = shiftGa4Date(range.current.startDate, index);
     return {
       date,
       pageviews: pageviewsByDate.get(date) ?? 0,
-      visits: visitsByDate.get(date) ?? 0,
+      visitors: visitorsByDate.get(date) ?? 0,
     };
   });
 }
@@ -315,13 +321,16 @@ async function getOverview(
 ): Promise<UmamiOverview> {
   const { config, connection, range } = await prepare(input);
   const { websiteId } = connection;
-  await getWebsite(config, websiteId);
+  // Umami silently turns unit=day into months past ~7 calendar months.
+  const trendOmitted = range.dayCount > MAX_TREND_DAYS;
 
   const [current, previous, daily, channels] = await Promise.all([
     getStats(config, websiteId, range.current),
     getStats(config, websiteId, range.previous),
-    getDailyPageviews(config, websiteId, range.current, range.timeZone),
-    getChannelVisits(config, websiteId, range.current),
+    trendOmitted
+      ? null
+      : getDailyPageviews(config, websiteId, range.current, range.timeZone),
+    getExpandedMetrics(config, websiteId, range.current, { type: "channel" }),
   ]);
   const currentTotals = toTotals(current);
   const previousTotals = toTotals(previous);
@@ -338,12 +347,18 @@ async function getOverview(
     current: currentTotals,
     previous: previousTotals,
     comparison: compareTotals(currentTotals, previousTotals),
-    trend: zeroFilledTrend(range, daily.pageviews, daily.sessions),
+    trend: daily ? zeroFilledTrend(range, daily.pageviews, daily.sessions) : [],
     channels: sortBy(
-      channels.map(({ x, y }) => ({ channel: x, visits: y })),
+      channels.map((row) => ({
+        channel: row.name ?? "(not set)",
+        visits: row.visits,
+      })),
       [({ visits }) => visits, "desc"],
     ),
-    warnings: [...range.warnings],
+    warnings: [
+      ...range.warnings,
+      ...(trendOmitted ? ["trend_omitted_range_too_long"] : []),
+    ],
   };
 }
 
@@ -358,8 +373,8 @@ async function getBreakdown(
     },
 ): Promise<UmamiBreakdown> {
   const { dimension, trafficSource, limit, offset } = input;
-  const { config, connection, range } = await prepare(input);
 
+  // Validate before prepare: invalid input never touches the database or Umami.
   // The referrer filter matches each pageview's own referrer domain, so it
   // is meaningful only for landing pages: on other dimensions it would drop
   // internal navigation or mislabel rows.
@@ -381,8 +396,8 @@ async function getBreakdown(
       `limit must be 1 to ${MAX_BREAKDOWN_LIMIT} and offset 0 or more.`,
     );
   }
+  const { config, connection, range } = await prepare(input);
   const { websiteId } = connection;
-  await getWebsite(config, websiteId);
 
   const { type, engagement } = DIMENSIONS[dimension];
   // Umami ignores limit and offset for `type=channel` (a short, fixed list),

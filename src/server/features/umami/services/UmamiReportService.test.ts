@@ -96,10 +96,7 @@ describe("getOverview", () => {
           ],
           sessions: [{ x: "2026-09-07T00:00:00Z", y: 1 }],
         },
-        "/metrics": [
-          { x: "direct", y: 1 },
-          { x: "organicSearch", y: 3 },
-        ],
+        "/metrics/expanded": [metric("direct", 1), metric("organicSearch", 3)],
       },
       [stats(4, 2, 80), stats(0)],
     );
@@ -128,18 +125,39 @@ describe("getOverview", () => {
       percentChange: null,
     });
     expect(overview.trend).toEqual([
-      { date: "2026-09-07", pageviews: 2, visits: 1 },
-      { date: "2026-09-08", pageviews: 0, visits: 0 },
-      { date: "2026-09-09", pageviews: 1, visits: 0 },
+      { date: "2026-09-07", pageviews: 2, visitors: 1 },
+      { date: "2026-09-08", pageviews: 0, visitors: 0 },
+      { date: "2026-09-09", pageviews: 1, visitors: 0 },
     ]);
-    expect(overview.channels.map((c) => c.channel)).toEqual([
-      "organicSearch",
-      "direct",
+    expect(overview.channels).toEqual([
+      { channel: "organicSearch", visits: 3 },
+      { channel: "direct", visits: 1 },
     ]);
     expect(overview.request.previousDateRange).toEqual({
       startDate: "2026-09-04",
       endDate: "2026-09-06",
     });
+  });
+
+  it("omits the daily trend for ranges Umami would bucket by month", async () => {
+    serve({ "/": website, "/metrics/expanded": [metric("direct", 1)] }, [
+      stats(4),
+      stats(0),
+    ]);
+
+    const overview = await UmamiReportService.getOverview({
+      ...scope,
+      startDate: "2026-01-01",
+      endDate: "2026-07-04", // 185 days
+    });
+
+    expect(overview.trend).toEqual([]);
+    expect(overview.warnings).toContain("trend_omitted_range_too_long");
+    expect(overview.current.visits).toBe(4);
+    expect(overview.channels).toHaveLength(1);
+    expect(urlsCalled().some((u) => u.pathname.endsWith("/pageviews"))).toBe(
+      false,
+    );
   });
 
   it("reports a website that Umami no longer has", async () => {
@@ -207,6 +225,37 @@ describe("getBreakdown", () => {
     expect(device.rows[0]).toMatchObject({
       bounces: 15,
       totalTimeSeconds: 720,
+    });
+  });
+
+  it("reports a deleted website instead of zeroed rows", async () => {
+    serve({ "/": { ...website, deletedAt: "2026-10-01T00:00:00Z" } });
+
+    await expect(
+      UmamiReportService.getBreakdown({
+        ...input,
+        dimension: "page",
+        limit: 100,
+      }),
+    ).rejects.toMatchObject({ code: "umami_website_not_found" });
+  });
+
+  it("nulls bounces and time for event, where Umami reuses those fields", async () => {
+    serve({
+      "/": website,
+      "/metrics/expanded": [{ ...metric("signup", 5, 3), totaltime: "90" }],
+    });
+
+    const events = await UmamiReportService.getBreakdown({
+      ...input,
+      dimension: "event",
+      limit: 100,
+    });
+
+    expect(events.rows[0]).toMatchObject({
+      pageviews: 5,
+      bounces: null,
+      totalTimeSeconds: null,
     });
   });
 
@@ -280,6 +329,7 @@ describe("getBreakdown", () => {
         limit: 10,
       }),
     ).rejects.toMatchObject({ code: "validation_error" });
+    expect(mocks.getByProjectId).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

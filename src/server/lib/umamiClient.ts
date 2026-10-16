@@ -117,7 +117,8 @@ async function request<T>(
   }
   if (!response.ok) throw errorForStatus(response);
 
-  const parsed = schema.safeParse(await response.json().catch(() => null));
+  // `undefined` (not null) so an HTML 2xx fails nullable schemas too.
+  const parsed = schema.safeParse(await response.json().catch(() => undefined));
   if (!parsed.success) {
     throw new UmamiError(
       "umami_malformed_response",
@@ -212,8 +213,9 @@ export function getStats(
   );
 }
 
-/** Daily page views; days without data are omitted. Each `x` starts with the
- *  local date in `timeZone`. */
+/** Daily page views and visitors (`sessions` counts distinct sessions, i.e.
+ *  visitors); days without data are omitted. Each `x` starts with the local
+ *  date in `timeZone`. */
 export async function getDailyPageviews(
   config: UmamiConfig,
   websiteId: string,
@@ -225,19 +227,6 @@ export async function getDailyPageviews(
     `/websites/${websiteId}/pageviews`,
     { ...windowQuery(window), unit: "day", timezone: timeZone },
     pageviewsSchema,
-  );
-}
-
-export function getChannelVisits(
-  config: UmamiConfig,
-  websiteId: string,
-  window: UmamiWindow,
-): Promise<Array<{ x: string; y: number }>> {
-  return request(
-    config,
-    `/websites/${websiteId}/metrics`,
-    { ...windowQuery(window), type: "channel" },
-    seriesSchema,
   );
 }
 

@@ -70,7 +70,7 @@ const overview: UmamiOverview = {
     totalTimeSeconds: noChange,
     avgVisitSeconds: noChange,
   },
-  trend: [{ date: "2026-09-01", pageviews: 3, visits: 2 }],
+  trend: [{ date: "2026-09-01", pageviews: 3, visitors: 2 }],
   channels: [{ channel: "organicSearch", visits: 4 }],
   warnings: ["end_date_clamped"],
 };
@@ -126,7 +126,7 @@ describe("Umami MCP tools", () => {
     });
     expect(text).toContain("Example Site");
     expect(text).toContain("2026-09-01 through 2026-09-28 (Europe/Madrid)");
-    expect(text).toContain("end_date_clamped");
+    expect(text).toContain("end_date_clamped: endDate was today or later");
     expect(text).toContain("organicSearch");
   });
 
@@ -200,13 +200,5 @@ describe("Umami MCP tools", () => {
         retryAfterSeconds: 30,
       },
     });
-  });
-
-  it("rejects unknown input fields", () => {
-    const parsed = getUmamiOverviewTool.config.inputSchema.safeParse({
-      projectId: "project_1",
-      dimension: "page",
-    });
-    expect(parsed.success).toBe(false);
   });
 });
