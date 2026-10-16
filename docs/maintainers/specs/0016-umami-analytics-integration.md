@@ -2,9 +2,9 @@
 
 ## Status
 
-Proposed (2026-10-16). The connection lifecycle and Integrations UI ship
-first; the reporting service, the two MCP tools and the dashboard card follow
-on the same design.
+Accepted (2026-10-16). Implemented in full: the per-project connection and
+Integrations card, the reporting service, the two MCP tools and the dashboard
+card.
 
 ## Context
 
