@@ -90,10 +90,7 @@ export const getUmamiDashboardReport = createServerFn({ method: "POST" })
         if (isNotConnectedCode(error.code)) {
           return { connected: false as const, reason: error.code };
         }
-        // An external, transient condition, not an app fault.
-        if (error.code === "umami_rate_limited") {
-          throw new AppError("RATE_LIMITED");
-        }
+        throw new AppError(APP_ERROR_CODE[error.code], error.message);
       }
       throw error;
     }

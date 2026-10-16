@@ -16,12 +16,7 @@ vi.mock("./DashboardSetupAction", () => ({
 const fresh: DashboardActivation = {
   domain: null,
   ga4: { connected: false, propertyDisplayName: null, cardDismissedAt: null },
-  umami: {
-    configured: false,
-    connected: false,
-    websiteId: null,
-    websiteName: null,
-  },
+  umami: { connected: false, websiteId: null },
   gsc: { connected: false, siteUrl: null },
   mcp: { authorizedAt: null, firstToolCallAt: null, cardDismissedAt: null },
   competitorClickedAt: null,

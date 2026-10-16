@@ -41,15 +41,23 @@ function formatShortDate(date: string): string {
   });
 }
 
-function ChangeCell({ percentChange }: { percentChange: number | null }) {
+function ChangeCell({
+  percentChange,
+  lowerIsBetter = false,
+}: {
+  percentChange: number | null;
+  lowerIsBetter?: boolean;
+}) {
   if (percentChange === null) return "—";
   const percent = Math.round(percentChange * 100);
+  const improved = lowerIsBetter ? percent < 0 : percent > 0;
+  const worsened = lowerIsBetter ? percent > 0 : percent < 0;
   return (
     <span
       className={
-        percent > 0
+        improved
           ? "text-success"
-          : percent < 0
+          : worsened
             ? "text-destructive"
             : "text-muted-foreground"
       }
@@ -159,6 +167,7 @@ export function UmamiCard({
                 change: (
                   <ChangeCell
                     percentChange={comparison.bounceRate.percentChange}
+                    lowerIsBetter
                   />
                 ),
               },

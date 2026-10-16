@@ -5,12 +5,7 @@ import { getStepStatus, setupSteps, showGa4Card } from "./dashboardSteps";
 const fresh: DashboardActivation = {
   domain: null,
   ga4: { connected: false, propertyDisplayName: null, cardDismissedAt: null },
-  umami: {
-    configured: false,
-    connected: false,
-    websiteId: null,
-    websiteName: null,
-  },
+  umami: { connected: false, websiteId: null },
   gsc: { connected: false, siteUrl: null },
   mcp: { authorizedAt: null, firstToolCallAt: null, cardDismissedAt: null },
   competitorClickedAt: null,
@@ -51,12 +46,7 @@ describe("dashboard checklist", () => {
 });
 
 describe("GA4 card visibility", () => {
-  const umami = {
-    configured: true,
-    connected: true,
-    websiteId: "site-id",
-    websiteName: "Site",
-  };
+  const umami = { connected: true, websiteId: "site-id" };
   it("hides the connect pitch when Umami is connected, never a connected card", () => {
     expect(showGa4Card(fresh)).toBe(true);
     expect(showGa4Card({ ...fresh, umami })).toBe(false);
