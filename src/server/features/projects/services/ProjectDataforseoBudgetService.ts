@@ -17,7 +17,8 @@ import type { CreditFeature } from "@/shared/billing-credit-features";
 const ESTIMATED_AFTER_MS = 30 * 60 * 1000;
 
 const usdAmount = z.number().nonnegative();
-const usdLimit = usdAmount
+/** A limit in USD: finite, at least zero, at most two decimals; null is unset. */
+export const usdLimit = usdAmount
   .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
     message: "Limits have at most two decimals",
   })
