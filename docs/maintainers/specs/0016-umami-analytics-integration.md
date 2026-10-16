@@ -111,6 +111,37 @@ date as `umami_website_not_found`: Umami answers an admin key that way for an
 unknown or deleted website. Website ids are validated as UUIDs before any
 request, because Umami answers a malformed id with a bodiless 500.
 
+### Reports
+
+Every report first looks up the mapped website (see above), then reads Umami
+with explicit time windows. The previous period is a second `/stats` request
+over the equal-length window before the current one, not Umami's
+`compare=prev`, so it stays exact across DST changes. The daily trend comes
+from `/pageviews` with `unit=day` and the connection's `timezone`; Umami
+omits days without data and labels each bucket with its local date, so the
+service fills missing days with zero. Umami applies no threshold, which makes
+that truthful. Rates are `null` when their denominator is 0, and a percent
+change is `null` when the previous value is 0 or absent. The channel mix is
+`/metrics?type=channel` (visits per Umami channel key, such as
+`organicSearch`, `direct` or `paidAds`).
+
+Breakdowns read `/metrics/expanded`, fetching one row beyond the page size to
+set `hasMore`, because Umami returns no total. Umami hard-codes `bounces` and
+`totaltime` to 0 for page-level types, so those two columns are `null` for
+`page`, `landing_page`, `exit_page`, `page_title`, `referrer_domain`,
+`utm_source`, `utm_medium`, `utm_campaign` and `hostname`. They are real
+values for `channel`, `country`, `device`, `browser`, `os`, `language` and
+`event`. Pageviews, visitors and visits are always real. Counts may arrive as
+strings and are coerced.
+
+`search_engines` sends the filter `referrer=re.(<search domains>)` over
+Umami's own search-engine domain list. Umami matches the filter against each
+pageview's own referrer domain, not a session's first referrer. That is right
+for landing pages, but on `page` it would drop internal navigation pages, so
+the combination is accepted only with `landing_page` and any other dimension
+is a `validation_error` before any request. Referrer domains are stored
+without `www.`.
+
 ### MCP tools
 
 Two read-only, project-scoped tools are registered only when Umami is

@@ -125,6 +125,148 @@ async function request<T>(
   return parsed.data;
 }
 
+// Postgres returns some sums (pageviews, totaltime) as strings.
+const umamiNumber = z.coerce.number().finite();
+
+const statsTotalsShape = {
+  pageviews: umamiNumber,
+  visitors: umamiNumber,
+  visits: umamiNumber,
+  bounces: umamiNumber,
+  totaltime: umamiNumber,
+};
+const statsSchema = z.object(statsTotalsShape);
+type UmamiStats = z.infer<typeof statsSchema>;
+
+const seriesSchema = z.array(z.object({ x: z.string(), y: umamiNumber }));
+const pageviewsSchema = z.object({
+  pageviews: seriesSchema,
+  sessions: seriesSchema,
+});
+
+const expandedMetricsSchema = z.array(
+  z.object({ name: z.string().nullable(), ...statsTotalsShape }),
+);
+type UmamiExpandedMetric = z.infer<typeof expandedMetricsSchema>[number];
+
+/** Metric `type` values of /metrics/expanded that the breakdown uses. */
+export type UmamiMetricType =
+  | "path"
+  | "entry"
+  | "exit"
+  | "title"
+  | "referrer"
+  | "channel"
+  | "country"
+  | "device"
+  | "browser"
+  | "os"
+  | "language"
+  | "event"
+  | "utmSource"
+  | "utmMedium"
+  | "utmCampaign"
+  | "hostname";
+
+type UmamiWindow = { startAt: number; endAt: number };
+
+const windowQuery = ({ startAt, endAt }: UmamiWindow) => ({
+  startAt: String(startAt),
+  endAt: String(endAt),
+});
+
+/** One website. Umami answers an admin key with `null` for an unknown website
+ *  and a deleted website keeps its row, so both are "not found". */
+export async function getWebsite(
+  config: UmamiConfig,
+  websiteId: string,
+): Promise<UmamiWebsite> {
+  // A malformed id makes Umami answer a bodiless 500.
+  if (!z.guid().safeParse(websiteId).success) {
+    throw new UmamiError("validation_error", "Invalid Umami website id.");
+  }
+  const website = await request(
+    config,
+    `/websites/${websiteId}`,
+    {},
+    websiteSchema.extend({ deletedAt: z.string().nullable() }).nullable(),
+  );
+  if (!website || website.deletedAt !== null) {
+    throw new UmamiError("umami_website_not_found", "Umami website not found.");
+  }
+  return website;
+}
+
+export function getStats(
+  config: UmamiConfig,
+  websiteId: string,
+  window: UmamiWindow,
+): Promise<UmamiStats> {
+  return request(
+    config,
+    `/websites/${websiteId}/stats`,
+    windowQuery(window),
+    statsSchema,
+  );
+}
+
+/** Daily page views; days without data are omitted. Each `x` starts with the
+ *  local date in `timeZone`. */
+export async function getDailyPageviews(
+  config: UmamiConfig,
+  websiteId: string,
+  window: UmamiWindow,
+  timeZone: string,
+): Promise<z.infer<typeof pageviewsSchema>> {
+  return request(
+    config,
+    `/websites/${websiteId}/pageviews`,
+    { ...windowQuery(window), unit: "day", timezone: timeZone },
+    pageviewsSchema,
+  );
+}
+
+export function getChannelVisits(
+  config: UmamiConfig,
+  websiteId: string,
+  window: UmamiWindow,
+): Promise<Array<{ x: string; y: number }>> {
+  return request(
+    config,
+    `/websites/${websiteId}/metrics`,
+    { ...windowQuery(window), type: "channel" },
+    seriesSchema,
+  );
+}
+
+export function getExpandedMetrics(
+  config: UmamiConfig,
+  websiteId: string,
+  window: UmamiWindow,
+  options: {
+    type: UmamiMetricType;
+    /** Omitted: Umami's default. `type=channel` ignores both. */
+    limit?: number;
+    offset?: number;
+    /** Umami filter syntax, e.g. `re.google|bing`. */
+    referrer?: string;
+  },
+): Promise<UmamiExpandedMetric[]> {
+  const { type, limit, offset, referrer } = options;
+  return request(
+    config,
+    `/websites/${websiteId}/metrics/expanded`,
+    {
+      ...windowQuery(window),
+      type,
+      ...(limit === undefined ? {} : { limit: String(limit) }),
+      ...(offset === undefined ? {} : { offset: String(offset) }),
+      ...(referrer ? { referrer } : {}),
+    },
+    expandedMetricsSchema,
+  );
+}
+
 /** Every website the API key can see: its own, plus those of teams the key's
  *  user owns or manages (Umami's `includeTeams` rule). */
 export async function listWebsites(
