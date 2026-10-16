@@ -14,7 +14,7 @@ import {
   type ReferringDomainsPageServiceInput,
   type TopPagesPageServiceInput,
 } from "@/server/features/backlinks/services/backlinksServiceData";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
+import type { ProjectBillingCustomer } from "@/server/lib/dataforseo";
 import type { CreditFeature } from "@/shared/billing-credit-features";
 
 const defaultCache: BacklinksCache = {
@@ -38,7 +38,7 @@ function createBacklinksService(cache: BacklinksCache = defaultCache) {
   return {
     async profileOverview(
       input: BacklinksLookupInput,
-      billingCustomer: BillingCustomerContext,
+      billingCustomer: ProjectBillingCustomer,
       // Lets a caller (e.g. the SAM agent) attribute the spend to its own credit
       // feature. Applied to the DataForSEO calls, not the cache key, so cached
       // results stay shared across callers.
@@ -58,7 +58,7 @@ function createBacklinksService(cache: BacklinksCache = defaultCache) {
     },
     async profileBacklinksPage(
       input: BacklinksRowsPageServiceInput,
-      billingCustomer: BillingCustomerContext,
+      billingCustomer: ProjectBillingCustomer,
       options?: BacklinksSpamFilterOptions,
     ) {
       const cacheKey = await buildPageCacheKey(
@@ -78,7 +78,7 @@ function createBacklinksService(cache: BacklinksCache = defaultCache) {
     },
     async profileReferringDomainsPage(
       input: ReferringDomainsPageServiceInput,
-      billingCustomer: BillingCustomerContext,
+      billingCustomer: ProjectBillingCustomer,
       options?: BacklinksSpamFilterOptions,
     ) {
       const cacheKey = await buildPageCacheKey(
@@ -98,7 +98,7 @@ function createBacklinksService(cache: BacklinksCache = defaultCache) {
     },
     async profileTopPagesPage(
       input: TopPagesPageServiceInput,
-      billingCustomer: BillingCustomerContext,
+      billingCustomer: ProjectBillingCustomer,
     ) {
       const cacheKey = await buildPageCacheKey(
         "backlinks:top-pages-page",
@@ -113,7 +113,7 @@ function createBacklinksService(cache: BacklinksCache = defaultCache) {
 
 function buildTargetCacheInput(
   input: BacklinksLookupInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ) {
   const normalizedTarget = normalizeBacklinksTarget(input.target, {
     scope: input.scope,
@@ -135,7 +135,7 @@ function buildTargetCacheInput(
 async function buildPageCacheKey(
   prefix: string,
   input: BacklinksPageCacheInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   options?: BacklinksSpamFilterOptions,
 ): Promise<string> {
   return buildCacheKey(prefix, {

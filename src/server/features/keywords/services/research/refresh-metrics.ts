@@ -3,8 +3,8 @@ import { normalizeIntent } from "@/server/features/keywords/services/research/he
 import {
   createDataforseoClient,
   fetchKeywordMetricsForList,
+  type ProjectBillingCustomer,
 } from "@/server/lib/dataforseo";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
 import type { RefreshSavedKeywordMetricsInput } from "@/types/schemas/keywords";
 
 // Cap concurrent D1 upserts per group. A project can accumulate thousands of
@@ -14,7 +14,7 @@ const REFRESH_UPSERT_BATCH_SIZE = 100;
 
 export async function refreshSavedKeywordMetrics(
   input: RefreshSavedKeywordMetricsInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<{ updated: number }> {
   const { rows } = await KeywordResearchRepository.listSavedKeywordsByProject({
     projectId: input.projectId,

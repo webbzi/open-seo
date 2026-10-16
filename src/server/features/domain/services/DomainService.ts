@@ -1,9 +1,11 @@
 import { waitUntil } from "cloudflare:workers";
 import { buildCacheKey, getCached, setCached } from "@/server/lib/r2-cache";
 import { z } from "zod";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
 import type { CreditFeature } from "@/shared/billing-credit-features";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
+import {
+  createDataforseoClient,
+  type ProjectBillingCustomer,
+} from "@/server/lib/dataforseo";
 import { buildRankedKeywordsScopeFilter } from "@/server/lib/dataforseo/researchScopeFilters";
 import { joinClauses } from "@/server/lib/dataforseo/filters";
 import { parseResearchTargetOrThrow } from "@/server/lib/domainUtils";
@@ -46,7 +48,7 @@ async function getOverview(
     locationCode: number;
     languageCode: string;
   },
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   metering: MeteringOverrides = {},
 ): Promise<DomainOverviewResult> {
   const target = parseResearchTargetOrThrow(input.domain, input.scope);
@@ -128,7 +130,7 @@ async function getSuggestedKeywords(
     organizationId: string;
     projectId: string;
   },
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   metering: MeteringOverrides = {},
 ): Promise<
   Array<{

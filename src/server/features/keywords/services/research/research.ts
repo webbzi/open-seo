@@ -1,5 +1,5 @@
 import { AppError } from "@/server/lib/errors";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
+import type { ProjectBillingCustomer } from "@/server/lib/dataforseo";
 import type { CreditFeature } from "@/shared/billing-credit-features";
 import {
   CACHE_TTL,
@@ -77,7 +77,7 @@ async function fetchRowsFromSource(
   source: KeywordSource,
   input: ResolvedResearchKeywordsInput,
   seedKeyword: string,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   opts: { creditFeature?: CreditFeature; resultLimit?: number } = {},
 ): Promise<EnrichedKeyword[]> {
   return fetchResearchRowsBySource(
@@ -107,7 +107,7 @@ async function fetchRowsFromSource(
 async function fetchAutoRows(
   input: ResolvedResearchKeywordsInput,
   seedKeyword: string,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   creditFeature?: CreditFeature,
 ): Promise<ResearchResult> {
   const blendOpts = {
@@ -170,7 +170,7 @@ async function fetchAutoRows(
 async function fetchGoogleAdsRows(
   input: ResolvedResearchKeywordsInput,
   seedKeyword: string,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   creditFeature?: CreditFeature,
 ): Promise<ResearchResult> {
   const rows = await fetchGoogleAdsResearchRows(
@@ -191,7 +191,7 @@ async function fetchManualRows(
   mode: Exclude<KeywordMode, "auto">,
   input: ResolvedResearchKeywordsInput,
   seedKeyword: string,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   creditFeature?: CreditFeature,
 ): Promise<ResearchResult> {
   const rows = await fetchRowsFromSource(
@@ -210,7 +210,7 @@ async function buildResearchCacheKey(
   input: ResolvedResearchKeywordsInput,
   normalizedKeywords: string[],
   mode: KeywordMode,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<string> {
   return buildCacheKey("kw:research", {
     cacheVersion: CACHE_VERSION,
@@ -257,7 +257,7 @@ function persistRows(
 
 export async function research(
   input: ResolvedResearchKeywordsInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   creditFeature?: CreditFeature,
 ): Promise<ResearchResult> {
   const uniqueKeywords = [
@@ -343,7 +343,7 @@ export async function research(
 async function researchLocal(
   input: ResolvedResearchKeywordsInput,
   locationName: string,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
   creditFeature?: CreditFeature,
 ): Promise<ResearchResult> {
   await assertLocalResearchLocation(input.locationCode, locationName);

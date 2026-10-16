@@ -258,6 +258,9 @@ export async function postRankCheckTasks(input: {
       // DataForSEO task id back to our keyword without relying on order.
       tag: `${task.keywordId}:${task.device}`,
     })),
+    // Billed at post time: a 5xx does not prove the tasks weren't created, so
+    // a replay could post (and pay for) them twice.
+    { maxServerErrorRetries: 0 },
   );
 
   if (!response || response.status_code !== 20000) {

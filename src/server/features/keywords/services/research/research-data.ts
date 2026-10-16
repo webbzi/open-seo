@@ -1,10 +1,10 @@
 import {
   type AdsKeywordIdeaItem,
   type LabsKeywordDataItem,
+  type ProjectBillingCustomer,
+  createDataforseoClient,
 } from "@/server/lib/dataforseo";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
 import type { CreditFeature } from "@/shared/billing-credit-features";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
 import {
   normalizeIntent,
   normalizeKeyword,
@@ -102,7 +102,7 @@ export function mapAdsKeywordItems(
 /** Research rows for countries DataForSEO Labs doesn't support. */
 export async function fetchGoogleAdsResearchRows(
   params: Omit<FetchResearchRowsParams, "source">,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<EnrichedKeyword[]> {
   const dataforseo = createDataforseoClient(billingCustomer);
   return mapAdsKeywordItems(
@@ -142,7 +142,7 @@ async function fetchRelatedRows(
 
 export async function fetchResearchRowsBySource(
   params: FetchResearchRowsParams,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<EnrichedKeyword[]> {
   const dataforseo = createDataforseoClient(billingCustomer);
 

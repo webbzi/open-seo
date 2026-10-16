@@ -3,7 +3,10 @@
 // everything funnels through envelope.ts (status + billing) and is metered in
 // client.ts.
 
-export { createDataforseoClient } from "@/server/lib/dataforseo/client";
+export {
+  createDataforseoClient,
+  type ProjectBillingCustomer,
+} from "@/server/lib/dataforseo/client";
 
 export {
   fetchKeywordMetricsForList,

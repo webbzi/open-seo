@@ -1,6 +1,6 @@
-import type { BillingCustomerContext } from "@/server/billing/subscription";
 import {
   createDataforseoClient,
+  type ProjectBillingCustomer,
   fetchAiTrackingTaskResult,
   MAX_TASKS_PER_POST,
   type AiTrackingAnswer,
@@ -143,7 +143,7 @@ function engineBatches(answers: AiLiveTask[], size: number): AiTaskBatch[] {
  */
 export async function postAiBatch(
   runId: string,
-  customer: BillingCustomerContext,
+  customer: ProjectBillingCustomer,
   market: AiRunMarket,
   batch: AiTaskBatch,
 ): Promise<AiPendingTask[]> {
@@ -181,7 +181,7 @@ export async function postAiBatch(
  */
 export async function collectAiLiveBatch(
   runId: string,
-  customer: BillingCustomerContext,
+  customer: ProjectBillingCustomer,
   market: AiRunMarket,
   tasks: AiLiveTask[],
 ) {
@@ -220,7 +220,7 @@ export async function collectAiLiveBatch(
 
 /** A call that throws becomes a failed answer that is not retried. */
 async function fetchLiveAnswers(
-  customer: BillingCustomerContext,
+  customer: ProjectBillingCustomer,
   market: AiRunMarket,
   tasks: AiLiveTask[],
 ): Promise<AiTrackingAnswer[]> {
@@ -254,7 +254,7 @@ async function fetchLiveAnswers(
  */
 export async function collectAiModelBatch(
   runId: string,
-  customer: BillingCustomerContext,
+  customer: ProjectBillingCustomer,
   market: AiRunMarket,
   batch: AiTaskBatch,
 ): Promise<void> {

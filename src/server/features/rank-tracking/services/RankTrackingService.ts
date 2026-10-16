@@ -1,11 +1,9 @@
 import { env } from "cloudflare:workers";
-import {
-  customerHasPaidPlan,
-  type BillingCustomerContext,
-} from "@/server/billing/subscription";
+import { customerHasPaidPlan } from "@/server/billing/subscription";
 import {
   createDataforseoClient,
   fetchKeywordMetricsForList,
+  type ProjectBillingCustomer,
 } from "@/server/lib/dataforseo";
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
 import { assertSerpLocationNameAccepted } from "@/server/lib/dataforseo/serp-location-validate";
@@ -225,7 +223,7 @@ async function updateConfig(
 async function triggerCheck(input: {
   configId: string;
   projectId: string;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   keywordIds?: string[];
   maxCostCredits?: number;
 }): Promise<RankCheckTriggerResult> {
@@ -283,7 +281,7 @@ const AUTO_CHECK_SCHEDULE_WINDOW_MS = 60 * 60_000;
 async function triggerAutoCheck(input: {
   configId: string;
   projectId: string;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   keywordIds?: string[];
 }): Promise<
   | RankCheckTriggerResult
@@ -335,7 +333,7 @@ async function getLatestRun(configId: string, projectId: string) {
 async function refreshKeywordMetrics(
   configId: string,
   projectId: string,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<{ updated: number }> {
   const config = await getValidatedConfig(configId, projectId);
   await requireRankCheckAccess(billingCustomer.organizationId);

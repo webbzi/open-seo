@@ -58,6 +58,7 @@ const customer = {
   organizationId: "org_1",
   userId: "user_1",
   userEmail: "user@example.com",
+  projectId: "project_1",
 };
 
 it("keeps shared-volume keywords independently filterable through research and cache", async () => {

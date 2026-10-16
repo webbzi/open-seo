@@ -78,6 +78,7 @@ const PHASE_PARAMS = {
     userId: "user-1",
     userEmail: "test@example.com",
     organizationId: "org-1",
+    projectId: "project-1",
   },
   projectId: "project-1",
   startUrl: "https://example.com/",

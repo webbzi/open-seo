@@ -1,6 +1,8 @@
 import { waitUntil } from "cloudflare:workers";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
+import {
+  createDataforseoClient,
+  type ProjectBillingCustomer,
+} from "@/server/lib/dataforseo";
 import { resolveLatestLlmModelName } from "@/server/lib/dataforseo/llm-models";
 import type { LlmResponseResult } from "@/server/lib/dataforseoLlmSchemas";
 import { AppError } from "@/server/lib/errors";
@@ -52,7 +54,7 @@ type DataforseoClient = ReturnType<typeof createDataforseoClient>;
 
 export async function explorePrompt(
   input: PromptExplorerInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<PromptExplorerResult> {
   await assertPaidAiSearchPlan(
     billingCustomer.organizationId,
@@ -97,7 +99,7 @@ type RunModelArgs = {
   model: PromptExplorerModel;
   input: PromptExplorerInput;
   highlightBrand: string | null;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   dataforseo: DataforseoClient;
 };
 

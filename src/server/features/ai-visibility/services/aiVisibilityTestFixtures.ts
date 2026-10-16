@@ -5,6 +5,7 @@ export const customer = {
   organizationId: "organization",
   userId: "user",
   userEmail: "user@example.com",
+  projectId: "project",
 };
 
 /** A new tracker for `project` with the given patch applied. */

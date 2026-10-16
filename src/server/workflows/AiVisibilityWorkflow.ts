@@ -15,7 +15,7 @@ import {
   type AiPendingTask,
 } from "@/server/features/ai-visibility/services/aiVisibilityCollection";
 import { runAiResearchSetup } from "@/server/features/ai-visibility/services/aiResearchKeywords";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
+import type { ProjectBillingCustomer } from "@/server/lib/dataforseo";
 
 // One binding serves answer collection runs and the one-time research setup,
 // so setup needs no new workflow infrastructure.
@@ -23,7 +23,7 @@ type AiVisibilityPayload = (
   | { runId: string }
   | { setupProjectId: string; runSeededTracking?: boolean }
 ) & {
-  customer: BillingCustomerContext;
+  customer: ProjectBillingCustomer;
 };
 
 // Metered and paid steps run once: a retry could post (and bill) twice.

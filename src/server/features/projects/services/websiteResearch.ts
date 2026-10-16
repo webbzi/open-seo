@@ -1,11 +1,15 @@
 import { generateText, Output, stepCountIs, tool } from "ai";
 import { z } from "zod";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
 import {
   billResearchSpend,
   type ResearchSpend,
 } from "@/server/billing/researchSpend";
 import { requireOpenRouterCostUsd } from "@/server/lib/chatAgent";
+import {
+  createDataforseoClient,
+  type ProjectBillingCustomer,
+} from "@/server/lib/dataforseo/client";
+import { isProjectDataforseoRefusal } from "@/server/lib/dataforseo/projectBudgetRefusal";
 import { fetchLiveSerp } from "@/server/lib/dataforseo/serp";
 import { DataforseoChargedTaskError } from "@/server/lib/dataforseo/envelope";
 import { normalizeBacklinksTarget } from "@/server/lib/dataforseoBacklinksTarget";
@@ -14,6 +18,7 @@ import { buildChatAgentModel } from "@/server/lib/openrouter";
 import {
   getOptionalEnvValue,
   getRequiredEnvValue,
+  isHostedServerAuthMode,
 } from "@/server/lib/runtime-env";
 import { readSite } from "@/server/lib/scrape";
 import {
@@ -33,6 +38,45 @@ function isSearchOutage(error: unknown): error is AppError {
   return error instanceof AppError && error.code === "UPSTREAM_UNAVAILABLE";
 }
 
+type ResearchSearchInput = Parameters<typeof fetchLiveSerp>[0];
+
+/**
+ * One live Google search for competitor research, by deployment mode.
+ * Hosted: the searches belong to the already-admitted research task, so only
+ * their actual cost is collected for billResearchSpend instead of reserving
+ * credits and interrupting it. Self-hosted: each search is a paid call of its
+ * own, admitted against the project's DataForSEO budget and recorded by the
+ * metered client (billResearchSpend records nothing self-hosted).
+ */
+async function liveSearch(
+  customer: ProjectBillingCustomer,
+  spend: ResearchSpend[],
+) {
+  if (!(await isHostedServerAuthMode())) {
+    const client = createDataforseoClient(customer);
+    return (input: ResearchSearchInput) =>
+      client.serp.live({ ...input, creditFeature: "keyword_research" });
+  }
+  const record = (costUsd: number) =>
+    spend.push({
+      provider: "dataforseo",
+      creditFeature: "keyword_research",
+      operation: "project_website_research",
+      costUsd,
+    });
+  return async (input: ResearchSearchInput) => {
+    try {
+      const response = await fetchLiveSerp(input);
+      record(response.billing.costUsd);
+      return response.data;
+    } catch (error) {
+      if (error instanceof DataforseoChargedTaskError)
+        record(error.billing.costUsd);
+      throw error;
+    }
+  };
+}
+
 /** Internal research for callers that have already checked admission credits. */
 export async function researchWebsite(
   website: string,
@@ -43,7 +87,7 @@ export async function researchWebsite(
     locationCode: number;
     languageCode: string;
   },
-  customer: BillingCustomerContext,
+  customer: ProjectBillingCustomer,
 ) {
   const domain =
     project.domain ??
@@ -175,29 +219,18 @@ export async function researchWebsite(
                     "The search budget is exhausted. Use the existing results.",
                   );
                 searched = true;
+                const search = await liveSearch(customer, spend);
                 const results = await Promise.allSettled(
                   queries.map(async (keyword) => {
-                    // Searches belong to the already-admitted research task; collect
-                    // actual cost instead of reserving credits and interrupting it.
-                    let response;
+                    let items;
                     for (let attempt = 0; ; attempt++) {
                       try {
-                        response = await fetchLiveSerp({
-                          keyword,
-                          ...market,
-                          depth: 10,
-                        });
+                        items = await search({ keyword, ...market, depth: 10 });
                         break;
                       } catch (error) {
-                        if (error instanceof DataforseoChargedTaskError)
-                          spend.push({
-                            provider: "dataforseo",
-                            creditFeature: "keyword_research",
-                            operation: "project_website_research",
-                            costUsd: error.billing.costUsd,
-                          });
                         // DataForSEO's search engine errors (40101) usually clear
-                        // within seconds. Timeouts already used their whole budget.
+                        // within seconds. Timeouts already used their whole budget,
+                        // and a project budget refusal holds until its owner acts.
                         if (
                           attempt === SEARCH_RETRIES ||
                           !isSearchOutage(error) ||
@@ -209,15 +242,9 @@ export async function researchWebsite(
                         setTimeout(resolve, 1000 * 2 ** attempt),
                       );
                     }
-                    spend.push({
-                      provider: "dataforseo",
-                      creditFeature: "keyword_research",
-                      operation: "project_website_research",
-                      costUsd: response.billing.costUsd,
-                    });
                     return {
                       keyword,
-                      items: response.data
+                      items: items
                         .filter((item) => item.type === "organic")
                         .map((item) => ({
                           title: item.title,
@@ -230,10 +257,14 @@ export async function researchWebsite(
                 searchSucceeded = results.some(
                   (searchResult) => searchResult.status === "fulfilled",
                 );
+                // A refusal by the project's DataForSEO budget leaves live
+                // search unavailable just like an outage: the research keeps
+                // its other results and skips competitors.
                 searchOutage = results.every(
                   (searchResult) =>
                     searchResult.status === "rejected" &&
-                    isSearchOutage(searchResult.reason),
+                    (isSearchOutage(searchResult.reason) ||
+                      isProjectDataforseoRefusal(searchResult.reason)),
                 );
                 if (searchOutage)
                   return {
