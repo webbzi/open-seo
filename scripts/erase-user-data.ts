@@ -545,6 +545,15 @@ async function erasePostgres(db: Db, user: UserRow, organizationIds: string[]) {
       .update(schema.reportTemplates)
       .set({ createdByUserId: "gdpr-deleted-user" })
       .where(eq(schema.reportTemplates.createdByUserId, user.id));
+    // DataForSEO user columns have no user FK, so spend history survives with attribution wiped (updatedByUserId stays non-null: null = never configured).
+    await tx
+      .update(schema.projectDataforseoUsage)
+      .set({ actorUserId: "gdpr-deleted-user" })
+      .where(eq(schema.projectDataforseoUsage.actorUserId, user.id));
+    await tx
+      .update(schema.projectDataforseoBudgets)
+      .set({ updatedByUserId: "gdpr-deleted-user" })
+      .where(eq(schema.projectDataforseoBudgets.updatedByUserId, user.id));
     if (organizationIds.length > 0) {
       // Re-assert the solo-membership guard at delete time: anyone who
       // accepted an invite after the inventory was taken must abort the
