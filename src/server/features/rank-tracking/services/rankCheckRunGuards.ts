@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
+import type { ProjectBillingCustomer } from "@/server/lib/dataforseo";
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
 import type {
   RankCheckTriggerResult,
@@ -141,7 +141,7 @@ export async function beginRankCheckRun(input: {
   workflow: Env["RANK_CHECK_WORKFLOW"];
   config: RankCheckConfigForStart;
   projectId: string;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   keywordsTotal: number;
   keywordIds?: string[];
   maxCostCredits?: number;

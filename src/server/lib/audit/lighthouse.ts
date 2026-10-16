@@ -1,6 +1,9 @@
 import { detectUrlTemplate, canonicalUrlKey } from "./url-utils";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
+import {
+  createDataforseoClient,
+  type ProjectBillingCustomer,
+} from "@/server/lib/dataforseo";
+import { isProjectDataforseoRefusal } from "@/server/lib/dataforseo/projectBudgetRefusal";
 import type { LighthouseResult, LighthouseStrategy } from "./types";
 import type { PageFetchClass } from "@/shared/audit-fetch-class";
 import { putTextToR2 } from "@/server/lib/r2";
@@ -54,7 +57,7 @@ export async function fetchLighthouseResult(
   url: string,
   pageId: string,
   strategy: "mobile" | "desktop",
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<LighthouseFetchResult> {
   const dataforseo = createDataforseoClient(billingCustomer);
   try {
@@ -77,6 +80,18 @@ export async function fetchLighthouseResult(
       payloadJson: JSON.stringify(data),
     };
   } catch (error) {
+    // The project's own spending setting, not a provider failure: the check
+    // was never sent.
+    if (isProjectDataforseoRefusal(error)) {
+      const errorMessage =
+        error.code === "PROJECT_DATAFORSEO_PAUSED"
+          ? "Skipped: this project's DataForSEO paid usage is paused"
+          : "Skipped: not enough of this project's DataForSEO allowance was left";
+      console.info(
+        `Lighthouse skipped for ${url} (${strategy}): ${error.code}`,
+      );
+      return failedLighthouseFetch(url, pageId, strategy, errorMessage);
+    }
     const failed = error instanceof Error ? error : new Error(String(error));
     // Lighthouse runtime errors (ERRORED_DOCUMENT_REQUEST, NOT_HTML, NO_FCP) mean the
     // tenant's page didn't load for the provider's Chrome. The failure is already

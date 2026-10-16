@@ -204,22 +204,33 @@ async function persistAnswer(input: {
   ]);
 }
 
+// D1 caps bound parameters at 100 per statement; the update binds 4 besides
+// the ids.
+const FAIL_IDS_CHUNK_SIZE = 90;
+
 /** Fails the given answers, or every unfinished answer in the run. */
 async function failPendingObservations(
   runId: string,
   error: string,
   ids?: string[],
 ) {
-  await db
-    .update(aiObservations)
-    .set({ status: "failed", error })
-    .where(
-      and(
-        eq(aiObservations.runId, runId),
-        eq(aiObservations.status, "pending"),
-        ids ? inArray(aiObservations.id, ids) : undefined,
-      ),
-    );
+  const fail = (chunk?: string[]) =>
+    db
+      .update(aiObservations)
+      .set({ status: "failed", error })
+      .where(
+        and(
+          eq(aiObservations.runId, runId),
+          eq(aiObservations.status, "pending"),
+          chunk ? inArray(aiObservations.id, chunk) : undefined,
+        ),
+      );
+  if (!ids) {
+    await fail();
+    return;
+  }
+  for (let i = 0; i < ids.length; i += FAIL_IDS_CHUNK_SIZE)
+    await fail(ids.slice(i, i + FAIL_IDS_CHUNK_SIZE));
 }
 
 /** Advances a due tracker only if no one else has since, like claimDueConfig. */

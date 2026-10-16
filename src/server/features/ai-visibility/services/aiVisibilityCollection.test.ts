@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- one spec covers every collection step body in aiVisibilityCollection.ts against the same test database */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { aiObservations, projectCompetitors } from "@/db/schema";
 import { DataforseoChargedTaskError } from "@/server/lib/dataforseo/envelope";
@@ -415,7 +416,7 @@ describe("AI answer collection", () => {
     });
     await collectAiRound(runId, [pendingTask], true);
 
-    await finalizeAiRun(runId);
+    await finalizeAiRun(runId, null);
 
     expect(await repo.getRunInternal(runId)).toMatchObject({
       status: "partial",
@@ -424,5 +425,27 @@ describe("AI answer collection", () => {
       status: "failed",
       error: "No answer arrived within the collection window.",
     });
+  });
+
+  it("keeps the project refusal that stopped a run partway as the tracker's notice", async () => {
+    dataforseo.llmResponse
+      .mockResolvedValueOnce({ items: [] })
+      .mockRejectedValueOnce(new AppError("PROJECT_BUDGET_EXCEEDED"));
+    const tasks = [
+      { tag: "answer-0", prompt: "Which SEO tools?" },
+      { tag: "answer-1", prompt: "Best rank tracker?" },
+    ];
+
+    await expect(
+      collectAiModelBatch(runId, customer, market, { engine: "claude", tasks }),
+    ).rejects.toMatchObject({ code: "PROJECT_BUDGET_EXCEEDED" });
+    await finalizeAiRun(runId, "PROJECT_BUDGET_EXCEEDED");
+
+    expect(await repo.getRunInternal(runId)).toMatchObject({
+      status: "partial",
+    });
+    expect((await repo.getTracker("project"))?.lastSkipReason).toBe(
+      "PROJECT_BUDGET_EXCEEDED",
+    );
   });
 });

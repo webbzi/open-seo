@@ -65,7 +65,7 @@ export function DashboardNewQueries({
               </Link>
             }
           >
-            <Freshness {...data} />
+            <Freshness projectId={projectId} {...data} />
             {data.value.rows.length ? (
               <Table>
                 <TableHeader>

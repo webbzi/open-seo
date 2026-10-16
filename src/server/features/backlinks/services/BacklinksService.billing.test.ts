@@ -35,6 +35,7 @@ const billingCustomer = {
   organizationId: "org_123",
   userId: "user_123",
   userEmail: "team@example.com",
+  projectId: "project_123",
 };
 
 function mockTarget(
@@ -182,6 +183,7 @@ it("keeps page cache entries isolated per page, organization, and scope", async 
     organizationId: "org_456",
     userId: "user_456",
     userEmail: "other@example.com",
+    projectId: "project_456",
   });
   expect(backlinksRowsMock).toHaveBeenCalledTimes(3);
 

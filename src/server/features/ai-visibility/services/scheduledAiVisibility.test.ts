@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { projects } from "@/db/schema";
+import { ProjectDataforseoBudgetService } from "@/server/features/projects/services/ProjectDataforseoBudgetService";
 import { AiVisibilityRepository as repo } from "../repositories/AiVisibilityRepository";
 import { runScheduledAiVisibility } from "./scheduledAiVisibility";
 import { configuration } from "./aiVisibilityTestFixtures";
@@ -67,6 +68,25 @@ it("moves every due tracker on, including one whose check cannot start", async (
   expect(await repo.listRuns("project")).toMatchObject([
     { trigger: "scheduled", status: "queued" },
   ]);
+});
+
+it("records a paused project's skip on the tracker and still moves its schedule on", async () => {
+  await ProjectDataforseoBudgetService.updateBudget({
+    organizationId: "organization",
+    projectId: "project",
+    actorUserId: "user",
+    monthlyLimitUsd: null,
+    totalLimitUsd: null,
+    paused: true,
+  });
+  await dueTracker("project", false);
+
+  await runScheduledAiVisibility();
+
+  const tracker = await repo.getTracker("project");
+  expect(tracker?.lastSkipReason).toBe("PROJECT_DATAFORSEO_PAUSED");
+  expect(tracker?.nextCheckAt).not.toBe(due);
+  expect(await repo.listRuns("project")).toEqual([]);
 });
 
 it("records a skipped check for credits on the tracker without starting it", async () => {

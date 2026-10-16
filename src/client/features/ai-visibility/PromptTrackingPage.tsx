@@ -42,6 +42,10 @@ import type { ProjectMarket } from "@/client/features/projects/types";
 import { DEFAULT_LOCATION_CODE } from "@/shared/keyword-locations";
 import { scheduleLabel } from "@/shared/rank-tracking";
 import { InsufficientCreditsError } from "@/client/features/billing/InsufficientCreditsError";
+import {
+  ProjectDataforseoRefusal,
+  projectDataforseoRefusalCode,
+} from "@/client/features/projects/ProjectDataforseoRefusal";
 
 export function PromptTrackingPage({
   projectId,
@@ -108,6 +112,7 @@ function PromptTrackingContent({
   const currentRun = selectedRun ?? state.recentRuns[0] ?? null;
   const progress = useAiRunProgress(projectId, currentRun);
   const tracker = state.tracker;
+  const projectRefusal = projectDataforseoRefusalCode(tracker?.lastSkipReason);
   const ownBrand = state.brands.find((brand) => brand.own);
   const activePrompts = state.prompts.filter(
     (prompt) => !prompt.archived && !prompt.paused,
@@ -231,6 +236,13 @@ function PromptTrackingContent({
               <RunStatusLine run={progress.run} tracker={tracker} />
               {tracker?.lastSkipReason === "INSUFFICIENT_CREDITS" ? (
                 <InsufficientCreditsError variant="inline" />
+              ) : projectRefusal ? (
+                <p className="text-xs text-warning">
+                  <ProjectDataforseoRefusal
+                    projectId={projectId}
+                    code={projectRefusal}
+                  />
+                </p>
               ) : (
                 tracker?.lastSkipReason && (
                   <p className="text-xs text-warning">

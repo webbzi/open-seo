@@ -132,7 +132,7 @@ export function DashboardKeywords({
           description={
             <>
               {DESCRIPTIONS[source]}
-              {cached ? <Freshness {...cached} /> : null}
+              {cached ? <Freshness projectId={projectId} {...cached} /> : null}
             </>
           }
         >

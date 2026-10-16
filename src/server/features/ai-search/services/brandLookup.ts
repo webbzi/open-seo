@@ -1,13 +1,16 @@
 import { waitUntil } from "cloudflare:workers";
 import { identity, sortBy } from "remeda";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
+import {
+  createDataforseoClient,
+  type ProjectBillingCustomer,
+} from "@/server/lib/dataforseo";
 import {
   buildLlmTarget,
   CHATGPT_LANGUAGE_CODE,
   CHATGPT_LOCATION_CODE,
   type LlmPlatform,
 } from "@/server/lib/dataforseo";
+import { isProjectDataforseoRefusal } from "@/server/lib/dataforseo/projectBudgetRefusal";
 import type { LlmCrossAggregatedItem } from "@/server/lib/dataforseoLlmSchemas";
 import { AppError } from "@/server/lib/errors";
 import { buildCacheKey, getCached, setCached } from "@/server/lib/r2-cache";
@@ -51,7 +54,7 @@ const TOP_SOURCES_PER_PLATFORM = 10;
 
 export async function getBrandLookup(
   input: BrandLookupInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<BrandLookupResult> {
   const detected = detectTarget(input.query);
   const researchTarget = resolveResearchTarget(input, detected);
@@ -370,7 +373,8 @@ function rethrowIfBlockingAiSearchError(
       result.status === "rejected" &&
       result.reason instanceof AppError &&
       (result.reason.code === "INSUFFICIENT_CREDITS" ||
-        result.reason.code === "AI_SEARCH_BILLING_ISSUE")
+        result.reason.code === "AI_SEARCH_BILLING_ISSUE" ||
+        isProjectDataforseoRefusal(result.reason))
     ) {
       throw result.reason;
     }

@@ -101,6 +101,7 @@ const customer = {
   organizationId: "org",
   userId: "user",
   userEmail: "user@example.com",
+  projectId: "project",
 };
 it("shows new referring domains without paying for a fallback backlink request", async () => {
   providers.domains.mockResolvedValue({

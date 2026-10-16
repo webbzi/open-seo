@@ -4,6 +4,10 @@ import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { LOCATIONS } from "@/client/features/keywords/locations";
 import {
+  ProjectDataforseoRefusal,
+  projectDataforseoRefusalCode,
+} from "@/client/features/projects/ProjectDataforseoRefusal";
+import {
   AlertTriangle,
   Archive,
   Globe,
@@ -231,6 +235,7 @@ function DomainRow({
   summary: ConfigSummary;
   onArchive: () => void;
 }) {
+  const projectRefusal = projectDataforseoRefusalCode(summary.lastSkipReason);
   return (
     <div className="relative flex w-full items-center gap-4 px-5 py-3.5 transition-colors hover:bg-foreground/[0.03]">
       <Link
@@ -268,6 +273,18 @@ function DomainRow({
           <p className="flex items-center gap-1 text-xs text-warning">
             <AlertTriangle className="size-3" />
             Scheduled check skipped — paid plan required
+          </p>
+        )}
+        {projectRefusal && (
+          // Above the row link, so the settings link is clickable.
+          <p className="pointer-events-auto relative z-10 flex items-start gap-1 text-xs text-warning">
+            <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+            <span>
+              <ProjectDataforseoRefusal
+                projectId={projectId}
+                code={projectRefusal}
+              />
+            </span>
           </p>
         )}
       </div>

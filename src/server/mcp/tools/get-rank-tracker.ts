@@ -16,6 +16,7 @@ import {
 } from "@/server/mcp/table";
 import { projectIdSchema } from "@/server/mcp/schemas";
 import { googleSerpUrl } from "@/shared/google-serp-url";
+import type { RankTrackingSkipReason } from "@/shared/rank-tracking";
 
 const RANK_RESULT_COLUMNS: McpTableColumn<unknown>[] = [
   // Put the removal id before provider text that may be truncated.
@@ -56,6 +57,17 @@ function formatLocation(code: unknown, name: unknown): string {
     : codeCell;
 }
 
+// The stored skip reasons are internal literals; the agent reads why.
+const SKIP_REASON_TEXT: Partial<Record<string, string>> = {
+  plan_required: "scheduled check skipped: paid plan required",
+  no_keywords: "scheduled check skipped: no keywords to check",
+  insufficient_credits: "scheduled check skipped: not enough credits",
+  project_budget_exceeded:
+    "last check stopped: the project's DataForSEO allowance was too low for it; it can be raised in the project's API spending settings",
+  project_dataforseo_paused:
+    "last check stopped: paid DataForSEO usage is paused for this project; it can be resumed in the project's API spending settings",
+} satisfies Record<RankTrackingSkipReason, string>;
+
 const CONFIG_COLUMNS: McpTableColumn<unknown>[] = [
   { header: "domain", value: (row) => readPath(row, "domain") },
   {
@@ -73,7 +85,15 @@ const CONFIG_COLUMNS: McpTableColumn<unknown>[] = [
   { header: "depth", value: (row) => readPath(row, "serpDepth") },
   { header: "schedule", value: (row) => readPath(row, "scheduleInterval") },
   { header: "last checked", value: (row) => readPath(row, "lastCheckedAt") },
-  { header: "skip reason", value: (row) => readPath(row, "lastSkipReason") },
+  {
+    header: "skip reason",
+    value: (row) => {
+      const reason = readPath(row, "lastSkipReason");
+      return typeof reason === "string"
+        ? (SKIP_REASON_TEXT[reason] ?? reason)
+        : reason;
+    },
+  },
   { header: "trackerId", value: (row) => readPath(row, "id") },
 ];
 

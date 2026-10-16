@@ -2,17 +2,31 @@ import { Popover } from "@base-ui/react/popover";
 import { Info } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
+import {
+  ProjectDataforseoRefusal,
+  projectDataforseoRefusalCode,
+} from "@/client/features/projects/ProjectDataforseoRefusal";
 import { getStandardErrorMessage } from "@/client/lib/error-messages";
 import { safeHttpUrl } from "@/shared/safe-url";
 export function Freshness({
+  projectId,
   stale,
   refreshError,
 }: {
+  projectId: string;
   fetchedAt: string;
   stale: boolean;
   refreshError: string | null;
 }) {
   if (!stale && !refreshError) return null;
+  const refusal = projectDataforseoRefusalCode(refreshError);
+  if (refusal)
+    return (
+      <p role="status" className="text-xs text-muted-foreground">
+        Showing saved results ·{" "}
+        <ProjectDataforseoRefusal projectId={projectId} code={refusal} />
+      </p>
+    );
   return (
     <p role="status" className="text-xs text-muted-foreground">
       Showing saved results

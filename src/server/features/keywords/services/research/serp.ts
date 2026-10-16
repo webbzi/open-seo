@@ -1,13 +1,13 @@
 import { waitUntil } from "cloudflare:workers";
 import {
+  createDataforseoClient,
   SERP_ANALYSIS_DEPTH,
+  type ProjectBillingCustomer,
   type SerpLiveItem,
 } from "@/server/lib/dataforseo";
 import { buildCacheKey, getCached, setCached } from "@/server/lib/r2-cache";
 import type { SerpResultItem } from "@/types/keywords";
 import { z } from "zod";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
 import { normalizeKeyword } from "./helpers";
 import { assertLocalResearchLocation } from "./local-volume";
 
@@ -74,7 +74,7 @@ async function getSerpLiveAnalysis(
     depth: number;
     locationName?: string;
   },
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<SerpAnalysisResult> {
   const keyword = normalizeKeyword(input.keyword);
   const { depth } = input;

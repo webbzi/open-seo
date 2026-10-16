@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
+import type { ProjectBillingCustomer } from "@/server/lib/dataforseo";
 import type { AiVisibilityService } from "@/server/features/ai-visibility/services/AiVisibilityService";
 import { AiVisibilityError } from "@/server/features/ai-visibility/services/aiVisibilityErrors";
 import { buildProjectMeta } from "@/server/mcp/context";
@@ -71,7 +71,7 @@ function defineAiTool<
   execute: (
     service: typeof AiVisibilityService,
     args: z.infer<z.ZodObject<Shape>> & { projectId: string },
-    billing: BillingCustomerContext,
+    billing: ProjectBillingCustomer,
     baseUrl: string,
     // Parsed against `output` below; loose output objects add an index
     // signature that the service's DTO interfaces do not declare.

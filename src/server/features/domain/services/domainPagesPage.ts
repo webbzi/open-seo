@@ -1,7 +1,9 @@
 import { waitUntil } from "cloudflare:workers";
 import { z } from "zod";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
+import {
+  createDataforseoClient,
+  type ProjectBillingCustomer,
+} from "@/server/lib/dataforseo";
 import { buildCacheKey, getCached, setCached } from "@/server/lib/r2-cache";
 import {
   parseResearchTargetOrThrow,
@@ -147,7 +149,7 @@ export async function getPagesPage(
     filters: DomainKeywordsFilters;
     search?: string;
   },
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<DomainPagesPageResult> {
   const target = parseResearchTargetOrThrow(input.domain, input.scope);
   const scopeFilter = buildRelevantPagesScopeFilter(target);

@@ -1,5 +1,5 @@
 import type { WorkflowStep } from "cloudflare:workers";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
+import type { ProjectBillingCustomer } from "@/server/lib/dataforseo";
 import { discoverUrls, parseRobotsTxt } from "@/server/lib/audit/discovery";
 import {
   failedLighthouseFetch,
@@ -47,7 +47,7 @@ const SEED_RPC_BATCH = 2_000;
 type AuditPhasesParams = {
   auditId: string;
   workflowInstanceId: string;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   projectId: string;
   startUrl: string;
   config: AuditConfig;
@@ -98,7 +98,8 @@ export async function runAuditPhases(
   await runLighthousePhase(step, {
     auditId,
     workflowInstanceId,
-    billingCustomer,
+    // The audit is the run its Lighthouse spend is recorded against.
+    billingCustomer: { ...billingCustomer, runId: auditId },
     projectId,
     startUrl,
     config,
@@ -180,7 +181,7 @@ async function runDiscoveryPhase(
 type LighthousePhaseParams = {
   auditId: string;
   workflowInstanceId: string;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   projectId: string;
   startUrl: string;
   config: AuditConfig;
@@ -326,7 +327,7 @@ async function finalizeAudit(args: {
   step: WorkflowStep;
   auditId: string;
   workflowInstanceId: string;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   projectId: string;
   startUrl: string;
   config: AuditConfig;

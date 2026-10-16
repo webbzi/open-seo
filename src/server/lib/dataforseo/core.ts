@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@/server/lib/errors";
 import { getRequiredEnvValue } from "@/server/lib/runtime-env";
 import type { ErrorCode } from "@/shared/error-codes";
@@ -5,6 +6,7 @@ import type { ErrorCode } from "@/shared/error-codes";
 // type from here.
 import {
   warnIfUpstreamResponseFailed,
+  type DataforseoApiCallCost,
   type DataforseoResponseLike,
   type DataforseoTaskLike,
 } from "@/server/lib/dataforseo/envelope";
@@ -29,6 +31,32 @@ export type DataforseoErrorClassifier = (
   details: string,
   path: string,
 ) => AppError | null;
+
+/**
+ * What DataForSEO saw of one metered call: `sent` once a request left this
+ * Worker, `status` the HTTP status answering the latest attempt (null until
+ * one arrives), and `billing` the top-level `cost` its parsed body reported
+ * for that attempt, with the request path (null when no body was read or it
+ * carried no usable cost). The project ledger reads it to settle a failed
+ * call: an envelope cost is what DataForSEO charged, even for a request-level
+ * refusal answered with HTTP 200; otherwise nothing sent, or an HTTP 4xx
+ * refusal, proves it unbilled.
+ */
+export type DataforseoDispatch = {
+  sent: boolean;
+  status: number | null;
+  billing: DataforseoApiCallCost | null;
+};
+
+const dispatchStore = new AsyncLocalStorage<DataforseoDispatch>();
+
+/** Runs one metered call, recording its requests into `dispatch`. */
+export function trackDataforseoDispatch<T>(
+  dispatch: DataforseoDispatch,
+  run: () => Promise<T>,
+): Promise<T> {
+  return dispatchStore.run(dispatch, run);
+}
 
 function formatDataforseoErrorPayload(value: unknown): string {
   const text =
@@ -74,9 +102,15 @@ function createAuthenticatedFetch(
     // rather than restarting a fresh 60s budget on each attempt.
     const signal =
       init?.signal ?? AbortSignal.timeout(DATAFORSEO_REQUEST_TIMEOUT_MS);
+    const dispatch = dispatchStore.getStore();
 
     for (let attempt = 0; ; attempt++) {
       let response: Response;
+      if (dispatch) {
+        dispatch.sent = true;
+        dispatch.status = null;
+        dispatch.billing = null;
+      }
       try {
         response = await fetch(url, { ...init, headers, signal });
       } catch (error) {
@@ -104,6 +138,7 @@ function createAuthenticatedFetch(
         }
         throw error;
       }
+      if (dispatch) dispatch.status = response.status;
       if (response.ok) return response;
 
       // Transient upstream 5xx on an idempotent read -> back off and retry.
@@ -191,6 +226,17 @@ async function requestDataforseo<TTask extends DataforseoTaskLike>(
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the task type is the caller's claim about the payload; billing metadata and item fields are validated downstream (envelope.ts + section Zod schemas)
   const parsed = JSON.parse(text) as DataforseoResponseLike<TTask>;
   warnIfUpstreamResponseFailed(parsed, path);
+  // The top-level `cost` is the USD DataForSEO charged for this HTTP request,
+  // present on refusals and successes alike.
+  const dispatch = dispatchStore.getStore();
+  const cost: unknown = parsed?.cost;
+  if (
+    dispatch &&
+    typeof cost === "number" &&
+    Number.isFinite(cost) &&
+    cost >= 0
+  )
+    dispatch.billing = { path: path.split("/").filter(Boolean), costUsd: cost };
   return parsed;
 }
 

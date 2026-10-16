@@ -4,6 +4,7 @@ import { RankTrackingRepository } from "@/server/features/rank-tracking/reposito
 import { RankTrackingService } from "@/server/features/rank-tracking/services/RankTrackingService";
 import { RankTrackingKeywordService } from "@/server/features/rank-tracking/services/RankTrackingKeywordService";
 import { getLatestResults } from "@/server/features/rank-tracking/services/rankTrackingResults";
+import { isProjectDataforseoRefusal } from "@/server/lib/dataforseo/projectBudgetRefusal";
 import { AppError, asAppError } from "@/server/lib/errors";
 import { captureServerEvent } from "@/server/lib/posthog";
 import { requireProjectContext } from "@/serverFunctions/middleware";
@@ -192,6 +193,8 @@ function logAutoActionFailure(action: string, err: unknown) {
     console.info(`[rank-tracking] ${action} skipped: paid plan required`);
   } else if (appErr?.code === "INSUFFICIENT_CREDITS") {
     console.info(`[rank-tracking] ${action} skipped: insufficient credits`);
+  } else if (isProjectDataforseoRefusal(appErr)) {
+    console.info(`[rank-tracking] ${action} skipped: ${appErr.code}`);
   } else {
     console.error(`[rank-tracking] ${action} failed:`, err);
   }

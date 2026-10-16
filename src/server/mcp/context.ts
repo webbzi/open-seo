@@ -1,6 +1,6 @@
 import type { ServerContext } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
+import type { ProjectBillingCustomer } from "@/server/lib/dataforseo";
 import { resolveClientLabel } from "@/server/mcp/client-label";
 import { buildDashboardUrl } from "@/server/mcp/urls";
 
@@ -165,7 +165,7 @@ export function createMcpToolContext(
 export function buildBillingCustomer(
   auth: Pick<ToolAuthContext, "userId" | "userEmail" | "organizationId">,
   projectId: string,
-): BillingCustomerContext {
+): ProjectBillingCustomer {
   return {
     userId: auth.userId,
     userEmail: auth.userEmail,

@@ -1,7 +1,10 @@
 import { waitUntil } from "cloudflare:workers";
-import type { BillingCustomerContext } from "@/server/billing/subscription";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
+import {
+  createDataforseoClient,
+  type ProjectBillingCustomer,
+} from "@/server/lib/dataforseo";
 import { resolveLatestLlmModelName } from "@/server/lib/dataforseo/llm-models";
+import { isProjectDataforseoRefusal } from "@/server/lib/dataforseo/projectBudgetRefusal";
 import type { LlmResponseResult } from "@/server/lib/dataforseoLlmSchemas";
 import { AppError } from "@/server/lib/errors";
 import { assertPaidAiSearchPlan } from "./access";
@@ -52,7 +55,7 @@ type DataforseoClient = ReturnType<typeof createDataforseoClient>;
 
 export async function explorePrompt(
   input: PromptExplorerInput,
-  billingCustomer: BillingCustomerContext,
+  billingCustomer: ProjectBillingCustomer,
 ): Promise<PromptExplorerResult> {
   await assertPaidAiSearchPlan(
     billingCustomer.organizationId,
@@ -97,7 +100,7 @@ type RunModelArgs = {
   model: PromptExplorerModel;
   input: PromptExplorerInput;
   highlightBrand: string | null;
-  billingCustomer: BillingCustomerContext;
+  billingCustomer: ProjectBillingCustomer;
   dataforseo: DataforseoClient;
 };
 
@@ -338,10 +341,12 @@ function mapErrorToResult(
   if (
     reason instanceof AppError &&
     (reason.code === "INSUFFICIENT_CREDITS" ||
-      reason.code === "AI_SEARCH_BILLING_ISSUE")
+      reason.code === "AI_SEARCH_BILLING_ISSUE" ||
+      isProjectDataforseoRefusal(reason))
   ) {
-    // These account-level failures apply to every model, so surface one clear
-    // error instead of silently degrading to per-model failures.
+    // These account- and project-level failures apply to every model, so
+    // surface one clear error instead of silently degrading to per-model
+    // failures.
     throw reason;
   }
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowStep } from "cloudflare:workers";
+import { AppError } from "@/server/lib/errors";
 import { RankCheckWorkflow } from "./RankCheckWorkflow";
 
 const mocks = vi.hoisted(() => ({
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   failRunIfActive: vi.fn(),
   captureServerEvent: vi.fn(),
   isHostedServerAuthMode: vi.fn(),
+  projectDataforseoRefusal: vi.fn(),
 }));
 
 vi.mock("cloudflare:workers", () => ({
@@ -55,6 +57,10 @@ vi.mock("@/server/billing/autumn", () => ({
 vi.mock("@/server/lib/runtime-env", () => ({
   isHostedServerAuthMode: mocks.isHostedServerAuthMode,
 }));
+vi.mock(
+  "@/server/features/projects/services/projectDataforseoPrecheck",
+  () => ({ projectDataforseoRefusal: mocks.projectDataforseoRefusal }),
+);
 
 const billingCustomer = {
   userId: "user_1",
@@ -78,7 +84,7 @@ const payload = {
   languageCode: "en",
   devices: "desktop" as "desktop" | "mobile" | "both",
   serpDepth: 10,
-  trigger: "manual" as const,
+  trigger: "manual" as "manual" | "scheduled",
 };
 
 function keywords(count: number) {
@@ -112,6 +118,7 @@ describe("rank check workflow credit ceiling", () => {
     mocks.updateRun.mockResolvedValue(undefined);
     mocks.isHostedServerAuthMode.mockResolvedValue(true);
     mocks.autumnCheck.mockResolvedValue({ balance: { remaining: 1_000 } });
+    mocks.runLiveCheck.mockResolvedValue({ queueStats: null, refusal: null });
   });
 
   it("rejects a keyword-list race before balance or DataForSEO calls", async () => {
@@ -161,6 +168,7 @@ describe("rank check finalization", () => {
     mocks.updateRun.mockResolvedValue(undefined);
     mocks.isHostedServerAuthMode.mockResolvedValue(true);
     mocks.autumnCheck.mockResolvedValue({ balance: { remaining: 1_000 } });
+    mocks.runLiveCheck.mockResolvedValue({ queueStats: null, refusal: null });
   });
 
   it("fails a run where no keyword produced a snapshot, keeping the recorded reason", async () => {
@@ -194,6 +202,75 @@ describe("rank check finalization", () => {
         errorMessage:
           "Checked 3 of 3 desktop and 0 of 3 mobile keyword(s): Invalid Field: 'location_name'.",
       }),
+    );
+  });
+});
+
+describe("rank check project DataForSEO refusals", () => {
+  beforeEach(() => {
+    mocks.getConfigById.mockResolvedValue({ isActive: true });
+    mocks.getRunById.mockResolvedValue({ ...activeRun, keywordsTotal: 3 });
+    mocks.getKeywordsForConfig.mockResolvedValue(keywords(3));
+    mocks.getSnapshotsForRun.mockResolvedValue([]);
+    mocks.isHostedServerAuthMode.mockResolvedValue(false);
+    mocks.projectDataforseoRefusal.mockResolvedValue(null);
+    mocks.runLiveCheck.mockResolvedValue({ queueStats: null, refusal: null });
+  });
+
+  it("skips a scheduled run when the project's paid usage is paused, leaving its schedule alone", async () => {
+    mocks.projectDataforseoRefusal.mockResolvedValue(
+      new AppError("PROJECT_DATAFORSEO_PAUSED"),
+    );
+
+    await expect(runWorkflow({ trigger: "scheduled" })).rejects.toMatchObject({
+      code: "PROJECT_DATAFORSEO_PAUSED",
+    });
+
+    expect(mocks.projectDataforseoRefusal).toHaveBeenCalledWith(
+      "org_1",
+      "project_1",
+    );
+    expect(mocks.createDataforseoClient).not.toHaveBeenCalled();
+    expect(mocks.failRunIfActive).toHaveBeenCalledWith(
+      "run_1",
+      "PROJECT_DATAFORSEO_PAUSED",
+    );
+    // The scheduler already advanced nextCheckAt; only the reason is written.
+    expect(mocks.updateConfig).toHaveBeenCalledExactlyOnceWith(
+      "config_1",
+      "project_1",
+      { lastSkipReason: "project_dataforseo_paused" },
+    );
+  });
+
+  it("keeps a run's results from before a refusal and records the project reason", async () => {
+    mocks.getRunById.mockResolvedValue({
+      ...activeRun,
+      keywordsTotal: 3,
+      errorMessage: "PROJECT_BUDGET_EXCEEDED",
+    });
+    mocks.getSnapshotsForRun.mockResolvedValue([
+      { trackingKeywordId: "kw_0", device: "desktop" },
+    ]);
+    mocks.runLiveCheck.mockResolvedValue({
+      queueStats: null,
+      refusal: "PROJECT_BUDGET_EXCEEDED",
+    });
+
+    await runWorkflow({});
+
+    expect(mocks.updateRun).toHaveBeenCalledWith(
+      "run_1",
+      expect.objectContaining({
+        status: "completed",
+        keywordsChecked: 1,
+        errorMessage: "Checked 1 of 3 keyword(s): PROJECT_BUDGET_EXCEEDED",
+      }),
+    );
+    expect(mocks.updateConfig).toHaveBeenCalledExactlyOnceWith(
+      "config_1",
+      "project_1",
+      expect.objectContaining({ lastSkipReason: "project_budget_exceeded" }),
     );
   });
 });

@@ -1,10 +1,11 @@
 /* eslint-disable max-lines */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AUTUMN_SEO_DATA_BALANCE_FEATURE_ID,
   AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID,
   creditsForProviderUsd,
 } from "@/shared/billing";
+import type { ProjectDataforseoBudgetService } from "@/server/features/projects/services/ProjectDataforseoBudgetService";
 
 interface CheckCallArg {
   customerId: string;
@@ -25,12 +26,16 @@ interface FinalizeCallArg {
 }
 
 const {
+  admitMock,
+  settleMock,
   checkMock,
   finalizeMock,
   getOrCreateMock,
   isHostedServerAuthModeMock,
   mockEnv,
 } = vi.hoisted(() => ({
+  admitMock: vi.fn<(typeof ProjectDataforseoBudgetService)["admit"]>(),
+  settleMock: vi.fn<(typeof ProjectDataforseoBudgetService)["settle"]>(),
   checkMock: vi.fn<(arg: CheckCallArg) => Promise<CheckResult>>(),
   finalizeMock:
     vi.fn<(arg: FinalizeCallArg) => Promise<{ success: boolean }>>(),
@@ -38,6 +43,13 @@ const {
   isHostedServerAuthModeMock: vi.fn(),
   mockEnv: {},
 }));
+
+vi.mock(
+  "@/server/features/projects/services/ProjectDataforseoBudgetService",
+  () => ({
+    ProjectDataforseoBudgetService: { admit: admitMock, settle: settleMock },
+  }),
+);
 
 vi.mock("cloudflare:workers", () => ({
   env: mockEnv,
@@ -65,6 +77,7 @@ vi.mock("@/server/billing/subscription", async (importOriginal) => {
 
 vi.mock("@/server/lib/runtime-env", () => ({
   isHostedServerAuthMode: isHostedServerAuthModeMock,
+  getRequiredEnvValue: async () => "test-api-key",
 }));
 
 vi.mock("@/server/lib/posthog", () => ({
@@ -130,7 +143,11 @@ import {
   mapDataforseoPathToCreditFeature,
 } from "@/server/lib/dataforseo/client";
 import { dataforseoPricing } from "@/server/lib/dataforseo/pricing";
-import { DataforseoChargedTaskError } from "@/server/lib/dataforseo/envelope";
+import { dataforseoPost } from "@/server/lib/dataforseo/core";
+import {
+  assertOk,
+  DataforseoChargedTaskError,
+} from "@/server/lib/dataforseo/envelope";
 import { AppError } from "@/server/lib/errors";
 import { fetchBacklinksSummary } from "@/server/lib/dataforseo/backlinks";
 import { fetchRankCheckSerp } from "@/server/lib/dataforseo/serp";
@@ -139,6 +156,7 @@ const billingCustomer = {
   organizationId: "org_123",
   userId: "user_123",
   userEmail: "alice@example.com",
+  projectId: "project_123",
 };
 
 const backlinksInput = {
@@ -178,19 +196,192 @@ function mockDataforseoResult(costUsd: number) {
   });
 }
 
-describe("meterDataforseoCall", () => {
-  it("skips billing in non-hosted mode", async () => {
-    isHostedServerAuthModeMock.mockResolvedValue(false);
+function setupSelfHostedMode() {
+  isHostedServerAuthModeMock.mockResolvedValue(false);
+  admitMock.mockImplementation(async ({ estimatesUsd }) => ({
+    usageIds: estimatesUsd.map((_, index) => `usage_${index}`),
+  }));
+  settleMock.mockResolvedValue(undefined);
+}
+
+const projectScope = {
+  organizationId: "org_123",
+  projectId: "project_123",
+};
+
+describe("self-hosted project ledger", () => {
+  beforeEach(setupSelfHostedMode);
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("admits the raw USD estimate and settles the provider's cost, without credits", async () => {
     mockDataforseoResult(RAW_COST);
 
     const client = createDataforseoClient(billingCustomer);
     const result = await client.backlinks.summary(backlinksInput);
 
     expect(result).toEqual({ rank: 42 });
+    expect(admitMock).toHaveBeenCalledExactlyOnceWith({
+      ...projectScope,
+      actorUserId: "user_123",
+      feature: null,
+      operation: "backlinks.summary",
+      runId: null,
+      estimatesUsd: [dataforseoPricing.backlinks.summary(backlinksInput)],
+    });
+    // No admission feature, so the billed path supplies it.
+    expect(settleMock).toHaveBeenCalledExactlyOnceWith({
+      ...projectScope,
+      outcomes: [
+        {
+          usageId: "usage_0",
+          kind: "charged",
+          costUsd: RAW_COST,
+          feature: "backlinks",
+        },
+      ],
+    });
+    expect(vi.mocked(waitUntil)).toHaveBeenCalledTimes(1);
     expect(checkMock).not.toHaveBeenCalled();
-    expect(finalizeMock).not.toHaveBeenCalled();
   });
 
+  // The fetcher drives the real request layer against a stubbed fetch, so the
+  // outcome reflects what actually reached DataForSEO.
+  function failThroughRequestLayer(fetchMock: typeof fetch) {
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(fetchBacklinksSummary).mockImplementation(async () => {
+      assertOk(
+        await dataforseoPost("/v3/backlinks/summary/live", [backlinksInput], {
+          maxServerErrorRetries: 0,
+        }),
+      );
+      // A response that passes assertOk fails item validation.
+      throw new AppError("INTERNAL_ERROR", "invalid response shape");
+    });
+  }
+
+  const respond = (body: object) =>
+    failThroughRequestLayer(
+      vi.fn<typeof fetch>().mockResolvedValue(Response.json(body)),
+    );
+
+  it.each([
+    {
+      failure: "a charged task error at zero cost",
+      outcome: { kind: "charged", costUsd: 0 },
+      setup: () =>
+        vi.mocked(fetchBacklinksSummary).mockRejectedValue(
+          new DataforseoChargedTaskError("DataForSEO task failed", {
+            costUsd: 0,
+            path: backlinksPath,
+          }),
+        ),
+    },
+    {
+      failure: "a request-level refusal in an HTTP 200 body at its cost",
+      outcome: { kind: "charged", costUsd: 0 },
+      setup: () =>
+        respond({
+          status_code: 40203,
+          status_message: "Cost limit exceeded.",
+          cost: 0,
+          tasks: null,
+        }),
+    },
+    {
+      failure: "a billed response that fails validation at its cost",
+      outcome: { kind: "charged", costUsd: 0.002, feature: "backlinks" },
+      setup: () =>
+        respond({
+          status_code: 20000,
+          cost: 0.002,
+          tasks: [{ status_code: 20000 }],
+        }),
+    },
+    {
+      failure: "an error before any request was sent",
+      outcome: { kind: "released" },
+      setup: () =>
+        vi
+          .mocked(fetchBacklinksSummary)
+          .mockRejectedValue(new AppError("VALIDATION_ERROR")),
+    },
+    {
+      failure: "an HTTP 4xx refusal",
+      outcome: { kind: "released" },
+      setup: () =>
+        failThroughRequestLayer(
+          vi
+            .fn<typeof fetch>()
+            .mockResolvedValue(
+              new Response("Payment Required", { status: 402 }),
+            ),
+        ),
+    },
+    {
+      failure: "an HTTP 5xx",
+      outcome: { kind: "unknown" },
+      setup: () =>
+        failThroughRequestLayer(
+          vi
+            .fn<typeof fetch>()
+            .mockResolvedValue(new Response("upstream error", { status: 500 })),
+        ),
+    },
+    {
+      failure: "a transport failure after sending",
+      outcome: { kind: "unknown" },
+      setup: () =>
+        failThroughRequestLayer(
+          vi.fn<typeof fetch>().mockRejectedValue(new TypeError("network")),
+        ),
+    },
+  ])("settles $failure as $outcome.kind", async ({ outcome, setup }) => {
+    setup();
+
+    const client = createDataforseoClient(billingCustomer);
+    await expect(client.backlinks.summary(backlinksInput)).rejects.toThrow();
+
+    expect(settleMock).toHaveBeenCalledExactlyOnceWith({
+      ...projectScope,
+      outcomes: [expect.objectContaining({ usageId: "usage_0", ...outcome })],
+    });
+  });
+
+  it("returns the results when the settlement write fails", async () => {
+    mockDataforseoResult(RAW_COST);
+    settleMock.mockRejectedValue(new Error("database unavailable"));
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    const client = createDataforseoClient(billingCustomer);
+    await expect(client.backlinks.summary(backlinksInput)).resolves.toEqual({
+      rank: 42,
+    });
+
+    expect(consoleError).toHaveBeenCalledWith(
+      "dataforseo.project-settle-failed",
+      expect.objectContaining({ ...projectScope, usageIds: ["usage_0"] }),
+    );
+  });
+
+  it("refuses to spend for a customer without a project", async () => {
+    mockDataforseoResult(RAW_COST);
+
+    const client = createDataforseoClient({
+      ...billingCustomer,
+      projectId: "",
+    });
+    await expect(client.backlinks.summary(backlinksInput)).rejects.toThrow(
+      "no project",
+    );
+
+    expect(admitMock).not.toHaveBeenCalled();
+    expect(fetchBacklinksSummary).not.toHaveBeenCalled();
+  });
+});
+
+describe("meterDataforseoCall", () => {
   it("never calls the provider when the hold is refused", async () => {
     setupHostedMode();
     mockMonthlyBalance(0);
@@ -391,6 +582,78 @@ describe("rankCheckBatch", () => {
         overrideValue: creditsForProviderUsd(0.001),
       },
     ]);
+  });
+
+  it("self-hosted: admits the batch once, one raw estimate per call, and settles it once", async () => {
+    setupSelfHostedMode();
+    vi.mocked(fetchRankCheckSerp)
+      .mockResolvedValueOnce(billed)
+      .mockRejectedValueOnce(
+        new DataforseoChargedTaskError(
+          "DataForSEO task failed",
+          billed.billing,
+        ),
+      )
+      .mockRejectedValueOnce(new AppError("VALIDATION_ERROR"));
+
+    const client = createDataforseoClient({
+      ...billingCustomer,
+      runId: "run_123",
+    });
+    const settled = await client.serp.rankCheckBatch([input, input, input]);
+
+    expect(settled.map((outcome) => outcome.status)).toEqual([
+      "fulfilled",
+      "rejected",
+      "rejected",
+    ]);
+    const estimate = dataforseoPricing.serp.rankCheck(input);
+    expect(admitMock).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        operation: "serp.rankCheckBatch",
+        feature: "rank_tracking",
+        runId: "run_123",
+        estimatesUsd: [estimate, estimate, estimate],
+      }),
+    );
+    expect(settleMock).toHaveBeenCalledOnce();
+    const { outcomes } = settleMock.mock.calls[0][0];
+    expect(outcomes).toHaveLength(3);
+    expect(outcomes).toEqual(
+      expect.arrayContaining([
+        { usageId: "usage_0", kind: "charged", costUsd: 0.001 },
+        { usageId: "usage_1", kind: "charged", costUsd: 0.001 },
+        { usageId: "usage_2", kind: "released" },
+      ]),
+    );
+  });
+
+  it("self-hosted: a refused batch rejects every call and sends none", async () => {
+    setupSelfHostedMode();
+    admitMock.mockRejectedValue(new AppError("PROJECT_BUDGET_EXCEEDED"));
+
+    const client = createDataforseoClient(billingCustomer);
+    const settled = await client.serp.rankCheckBatch([input, input]);
+
+    const refused = {
+      status: "rejected",
+      reason: { code: "PROJECT_BUDGET_EXCEEDED" },
+    };
+    expect(settled).toMatchObject([refused, refused]);
+    expect(fetchRankCheckSerp).not.toHaveBeenCalled();
+    expect(settleMock).not.toHaveBeenCalled();
+  });
+
+  it("self-hosted: a failed admission write fails the batch and sends nothing", async () => {
+    setupSelfHostedMode();
+    admitMock.mockRejectedValue(new Error("database unavailable"));
+
+    const client = createDataforseoClient(billingCustomer);
+    await expect(client.serp.rankCheckBatch([input])).rejects.toThrow(
+      "database unavailable",
+    );
+
+    expect(fetchRankCheckSerp).not.toHaveBeenCalled();
   });
 });
 

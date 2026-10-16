@@ -68,6 +68,7 @@ function run() {
           userId: "user",
           userEmail: "user@example.com",
           organizationId: "org",
+          projectId: "project",
         },
         projectId: "project",
         startUrl: "https://example.com/",
