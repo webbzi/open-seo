@@ -9,6 +9,7 @@ import * as sqliteAuth from "./better-auth-schema";
 import * as sqliteBilling from "./billing.schema";
 import * as sqliteGa4 from "./ga4.schema";
 import * as sqliteGsc from "./gsc.schema";
+import * as sqliteUmami from "./umami.schema";
 import * as sqliteTelemetry from "./telemetry.schema";
 import * as sqliteAiVisibility from "./ai-visibility.schema";
 import * as sqliteProjectDataforseo from "./project-dataforseo.schema";
@@ -22,6 +23,7 @@ import * as pgAuth from "./pg/better-auth-schema";
 import * as pgBilling from "./pg/billing.schema";
 import * as pgGa4 from "./pg/ga4.schema";
 import * as pgGsc from "./pg/gsc.schema";
+import * as pgUmami from "./pg/umami.schema";
 import * as pgTelemetry from "./pg/telemetry.schema";
 import * as pgAiVisibility from "./pg/ai-visibility.schema";
 import * as pgProjectDataforseo from "./pg/project-dataforseo.schema";
@@ -46,6 +48,7 @@ type AppSchema = typeof sqliteApp &
   typeof sqliteBilling &
   typeof sqliteGa4 &
   typeof sqliteGsc &
+  typeof sqliteUmami &
   typeof sqliteTelemetry &
   typeof sqliteAiVisibility &
   typeof sqliteProjectDataforseo;
@@ -63,6 +66,7 @@ const runtimeSchema =
         ...pgBilling,
         ...pgGa4,
         ...pgGsc,
+        ...pgUmami,
         ...pgTelemetry,
         ...pgAiVisibility,
         ...pgProjectDataforseo,
@@ -78,6 +82,7 @@ const runtimeSchema =
         ...sqliteBilling,
         ...sqliteGa4,
         ...sqliteGsc,
+        ...sqliteUmami,
         ...sqliteTelemetry,
         ...sqliteAiVisibility,
         ...sqliteProjectDataforseo,
@@ -125,6 +130,7 @@ export const {
   billingCustomerStatus,
   ga4Connections,
   gscConnections,
+  umamiConnections,
   telemetryState,
   aiTrackers,
   aiPrompts,

@@ -45,6 +45,10 @@ declare namespace Cloudflare {
     };
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
+    // Optional Umami v3.4+ instance (origin, or origin plus base path) and an
+    // account API key; Umami features are off unless both are valid.
+    UMAMI_API_URL?: string;
+    UMAMI_API_KEY?: string;
     LOOPS_API_KEY?: string;
     LOOPS_TRANSACTIONAL_VERIFY_EMAIL_ID?: string;
     LOOPS_TRANSACTIONAL_RESET_PASSWORD_ID?: string;

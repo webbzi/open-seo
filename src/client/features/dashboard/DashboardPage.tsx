@@ -23,6 +23,8 @@ import {
   GscCard,
 } from "@/client/features/dashboard/DashboardCards";
 import { Ga4Card } from "@/client/features/dashboard/Ga4Card";
+import { UmamiCard } from "@/client/features/dashboard/UmamiCard";
+import { showGa4Card } from "@/client/features/dashboard/dashboardSteps";
 import { WorkspaceMergeBanner } from "@/client/features/dashboard/WorkspaceMergeBanner";
 import { QueryError } from "@/client/components/QueryState";
 import {
@@ -115,7 +117,21 @@ export function DashboardPage({
         />
       ),
     },
-    ...(ga4Connected || !activation.ga4.cardDismissedAt
+    ...(activation.umami.connected
+      ? [
+          {
+            key: "umami",
+            hasData: true,
+            node: (
+              <UmamiCard
+                projectId={projectId}
+                websiteId={activation.umami.websiteId}
+              />
+            ),
+          },
+        ]
+      : []),
+    ...(showGa4Card(activation)
       ? [
           {
             key: "ga4",

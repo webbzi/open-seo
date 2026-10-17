@@ -6,6 +6,7 @@ import { AuditRepository } from "@/server/features/audit/repositories/AuditRepos
 import { getIssueTypePageCountsForAudit } from "@/server/features/audit/repositories/auditSummaryQueries";
 import { Ga4ConnectionRepository } from "@/server/features/ga4/repositories/Ga4ConnectionRepository";
 import { GscConnectionRepository } from "@/server/features/gsc/repositories/GscConnectionRepository";
+import { UmamiConnectionRepository } from "@/server/features/umami/repositories/UmamiConnectionRepository";
 
 export type DashboardActivation = {
   domain: string | null;
@@ -14,6 +15,7 @@ export type DashboardActivation = {
     propertyDisplayName: string | null;
     cardDismissedAt: string | null;
   };
+  umami: { connected: boolean; websiteId: string | null };
   gsc: { connected: boolean; siteUrl: string | null };
   mcp: {
     authorizedAt: string | null;
@@ -57,6 +59,7 @@ async function getActivation(input: {
 }): Promise<DashboardActivation> {
   const [
     ga4,
+    umami,
     gsc,
     orgActivation,
     projectActivation,
@@ -66,6 +69,10 @@ async function getActivation(input: {
     latestAudit,
   ] = await Promise.all([
     Ga4ConnectionRepository.getByProjectId(input.projectId),
+    UmamiConnectionRepository.getByProjectId({
+      projectId: input.projectId,
+      organizationId: input.organizationId,
+    }),
     GscConnectionRepository.getByProjectId(input.projectId),
     ActivationRepository.getOrganizationActivation(input.organizationId),
     ActivationRepository.getProjectActivation(input.projectId),
@@ -84,6 +91,10 @@ async function getActivation(input: {
       connected: ga4 !== null,
       propertyDisplayName: ga4?.propertyDisplayName ?? null,
       cardDismissedAt: projectActivation?.ga4CardDismissedAt ?? null,
+    },
+    umami: {
+      connected: umami !== null,
+      websiteId: umami?.websiteId ?? null,
     },
     gsc: { connected: gsc !== null, siteUrl: gsc?.siteUrl ?? null },
     mcp: {

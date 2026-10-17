@@ -11,6 +11,7 @@ import {
   organization,
   organizationActivationState,
   projects,
+  umamiConnections,
   userOnboardingAnswers,
 } from "@/db/schema";
 import { SHARED_WORKSPACE_ORGANIZATION_ID } from "./delegated-organization";
@@ -137,6 +138,10 @@ async function mergeLegacyWorkspaces() {
       .update(ga4Connections)
       .set(repointToShared)
       .where(inArray(ga4Connections.organizationId, legacyIds)),
+    tx
+      .update(umamiConnections)
+      .set(repointToShared)
+      .where(inArray(umamiConnections.organizationId, legacyIds)),
     ...(activationRows.length > 0
       ? [
           tx

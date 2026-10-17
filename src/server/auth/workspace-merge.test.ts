@@ -81,6 +81,11 @@ beforeAll(async () => {
       project_id TEXT NOT NULL,
       organization_id TEXT NOT NULL REFERENCES organization(id) ON DELETE CASCADE
     );
+    CREATE TABLE umami_connections (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      organization_id TEXT NOT NULL REFERENCES organization(id) ON DELETE CASCADE
+    );
   `);
 
   ({ WorkspaceMergeService } = await import("./workspace-merge"));
@@ -98,6 +103,7 @@ beforeEach(async () => {
     DELETE FROM organization_activation_state;
     DELETE FROM gsc_connections;
     DELETE FROM ga4_connections;
+    DELETE FROM umami_connections;
     DELETE FROM organization;
   `);
 });
@@ -124,6 +130,8 @@ async function seedLegacyWorkspaces() {
     INSERT INTO gsc_connections
       (id, project_id, organization_id, site_url, connected_by_user_id) VALUES
       ('gsc1', 'p1-acme', 'delegated-u1', 'sc-domain:acme.com', 'u1');
+    INSERT INTO umami_connections (id, project_id, organization_id) VALUES
+      ('umami1', 'p2-default', 'delegated-u2');
   `);
 }
 
@@ -183,6 +191,9 @@ describe("WorkspaceMergeService", () => {
     expect(await rows("SELECT organization_id FROM gsc_connections")).toEqual([
       expect.objectContaining({ organization_id: "shared-workspace" }),
     ]);
+    expect(await rows("SELECT organization_id FROM umami_connections")).toEqual(
+      [expect.objectContaining({ organization_id: "shared-workspace" })],
+    );
     expect(
       await rows("SELECT organization_id FROM user_onboarding_answers"),
     ).toEqual([

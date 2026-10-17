@@ -17,7 +17,7 @@ const statement = {
   billing: ["manage"],
   // Create + archive/restore projects. Renames/settings stay open to all.
   project: ["create", "delete"],
-  // GSC/GA4 connect, re-point, disconnect.
+  // GSC/GA4/Umami connect, re-point, disconnect.
   integration: ["manage"],
 } as const;
 

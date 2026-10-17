@@ -2,20 +2,26 @@ import { queryClient } from "@/client/tanstack-db/queryClient";
 import { googleConnectionOptions } from "@/client/features/integrations/googleProviders";
 import { createFileRoute } from "@tanstack/react-router";
 import { GoogleConnectionCard } from "@/client/features/integrations/GoogleConnectionCard";
+import {
+  UmamiConnectionCard,
+  umamiConnectionOptions,
+} from "@/client/features/integrations/UmamiConnectionCard";
 import { CrawlerAccessSettings } from "@/client/features/settings/CrawlerAccessSettings";
 
 export const Route = createFileRoute(
   "/_app/p/$projectId/settings/integrations",
 )({
   loader: ({ params }) => {
-    // Start both database checks on link intent without holding up navigation.
+    // Start the connection checks on link intent without holding up navigation.
     void queryClient.prefetchQuery(
       googleConnectionOptions("gsc", params.projectId),
     );
     void queryClient.prefetchQuery(
       googleConnectionOptions("ga4", params.projectId),
     );
+    void queryClient.prefetchQuery(umamiConnectionOptions(params.projectId));
   },
+  remountDeps: ({ params }) => params.projectId,
   component: ProjectIntegrationsRoute,
 });
 
@@ -33,6 +39,10 @@ function ProjectIntegrationsRoute() {
 
       <section id="google-analytics" className="scroll-mt-6">
         <GoogleConnectionCard provider="ga4" projectId={projectId} />
+      </section>
+
+      <section id="umami" className="scroll-mt-6">
+        <UmamiConnectionCard projectId={projectId} />
       </section>
 
       <CrawlerAccessSettings projectId={projectId} />
