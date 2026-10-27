@@ -17,6 +17,3 @@ drizzle/pg/
 planning/
 src/worker-configuration.d.ts
 web/
-
-# agent notebook written by the nb tool; reformatting it would fight its writer
-.notebook/

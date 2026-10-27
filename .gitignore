@@ -42,6 +42,8 @@ dist-sourcemaps/
 .claude/*
 !.claude/skills/
 !.claude/CLAUDE.md
+!.claude/rules/
+/.reports/
 
 # Alchemy local state + bundle artifacts (SaaS deploys)
 .alchemy/
