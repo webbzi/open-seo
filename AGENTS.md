@@ -46,6 +46,16 @@
 - Use `docs/maintainers/` for engineering decisions, development workflows, and maintenance notes that should be shared and versioned. This directory is tracked in Git but is not part of the user-facing documentation site. Create notes only when requested or useful for future maintenance; never include secrets.
 - Write PR descriptions in the `simple-issue-description` format, with no validation logs or per-file changelog. Continue using the dedicated papercut log for repository friction.
 
+## Public repository: no private details
+
+This repository is public. Commits, branch names, PR and issue text, review comments, code comments, test fixtures, docs, and `.agents/PAPERCUTS.md` are all published.
+
+- Keep these out of everything published: the maintainers' names, emails and organisation; clients and the projects run for them; the domains, hostnames and websites we own or deploy to; cloud account names, account or resource ids, workers.dev subdomains, and Zero Trust team names; local paths and usernames; and internal plans, costs, usage, or business context.
+- Use placeholders instead: `example.com`, `openseo.example.com`, `you@example.com`, `<account-id>`. Describe a change by what it does for any operator, not by what it does for our deployment.
+- Private context belongs in the gitignored maintainer records listed in `.claude/CLAUDE.md`, or in `.reports/`. Never write it into a tracked file, not even one you plan to delete later: removed files stay in git history.
+- Before every commit, push, and PR or issue edit, check the diff and the text for these details.
+- OpenSEO's own product domains and contact addresses (`openseo.so` and its subdomains), already in the code, are public and fine.
+
 ## Log papercuts
 
 When small, non-blocking repository friction occurs—a retried tool call, confusing setup step, flaky command, stale cache, misleading error, or non-obvious gotcha—use the `papercuts` skill and append it to `.agents/PAPERCUTS.md` in the moment. Continue the current task. Real bugs and tracked work are not papercuts, and sensitive data must never be logged.
