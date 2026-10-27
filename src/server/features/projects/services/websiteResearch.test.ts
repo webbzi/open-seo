@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type * as Ai from "ai";
 
 const {
   generateText,
@@ -21,7 +22,9 @@ const {
   listCompetitors: vi.fn(),
   listKeywords: vi.fn(),
 }));
-vi.mock("ai", () => ({
+vi.mock("ai", async (importOriginal) => ({
+  NoObjectGeneratedError: (await importOriginal<typeof Ai>())
+    .NoObjectGeneratedError,
   generateText,
   Output: { object: (value: unknown) => value },
   stepCountIs: vi.fn(),
@@ -35,7 +38,10 @@ vi.mock("@/server/lib/runtime-env", () => ({
   getOptionalEnvValue: vi.fn(),
   isHostedServerAuthMode,
 }));
-vi.mock("@/server/lib/openrouter", () => ({ buildChatAgentModel: vi.fn() }));
+vi.mock("@/server/lib/openrouter", () => ({
+  buildChatAgentModel: vi.fn(),
+  requireOpenRouterAccess: vi.fn(async () => ({ apiKey: "test-key" })),
+}));
 vi.mock("@/server/lib/chatAgent", () => ({
   requireOpenRouterCostUsd: vi.fn(),
 }));
@@ -51,7 +57,9 @@ vi.mock(
   () => ({ AiVisibilityRepository: { listResearchKeywords: listKeywords } }),
 );
 
+import { NoObjectGeneratedError } from "ai";
 import { researchWebsite } from "./websiteResearch";
+import { billResearchSpend } from "@/server/billing/researchSpend";
 import { AppError } from "@/server/lib/errors";
 import { customer } from "@/server/features/ai-visibility/services/aiVisibilityTestFixtures";
 
@@ -124,6 +132,22 @@ beforeEach(() => {
       };
     },
   );
+});
+
+const invalidJson = new NoObjectGeneratedError({
+  response: { id: "", timestamp: new Date(), modelId: "" },
+  usage: {
+    inputTokens: 0,
+    inputTokenDetails: {
+      noCacheTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    },
+    outputTokens: 0,
+    outputTokenDetails: { textTokens: 0, reasoningTokens: 0 },
+    totalTokens: 0,
+  },
+  finishReason: "stop",
 });
 
 describe("researchWebsite", () => {
@@ -210,6 +234,39 @@ describe("researchWebsite", () => {
     },
   );
 
+  it("retries with fresh tool budgets when the model returns invalid JSON", async () => {
+    listCompetitors.mockResolvedValue([]);
+    const succeed = generateText.getMockImplementation()!;
+    generateText.mockImplementationOnce(async (options) => {
+      await succeed(options);
+      throw invalidJson;
+    });
+
+    const result = await researchWebsite(
+      "https://saved.com",
+      project,
+      customer,
+    );
+
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(result.competitors).toEqual([competitor]);
+  });
+
+  it("does not credit a retry with an earlier attempt's search", async () => {
+    listCompetitors.mockResolvedValue([]);
+    const succeed = generateText.getMockImplementation()!;
+    generateText
+      .mockImplementationOnce(async (options) => {
+        await succeed(options);
+        throw invalidJson;
+      })
+      .mockResolvedValueOnce({ output: { competitors: [] } });
+
+    await expect(
+      researchWebsite("https://saved.com", project, customer),
+    ).rejects.toThrow("Website research was incomplete");
+  });
+
   it("fails instead of skipping competitors when search fails for a non-outage reason", async () => {
     listCompetitors.mockResolvedValue([]);
     search.mockRejectedValue(new AppError("DATAFORSEO_AUTH_FAILED"));
@@ -255,5 +312,22 @@ describe("researchWebsite", () => {
 
     expect(meteredSearch).toHaveBeenCalledOnce();
     expect(result.competitors).toEqual([]);
+  });
+
+  it("bills Context reads of a site that stays unreadable", async () => {
+    listSections.mockResolvedValue([]);
+    readSite.mockImplementation(
+      async (_site, _pages, usage: { contextCredits: number }) => {
+        usage.contextCredits += 1;
+        return { pages: [] };
+      },
+    );
+
+    await expect(
+      researchWebsite("https://saved.com", project, customer),
+    ).rejects.toThrow(AppError);
+    expect(billResearchSpend).toHaveBeenCalledWith(customer, [
+      expect.objectContaining({ provider: "context", costUsd: 0.0025 }),
+    ]);
   });
 });

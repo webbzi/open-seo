@@ -72,6 +72,15 @@ export const readCustomDomain = (stage: string) =>
     return domain;
   });
 
+/**
+ * The app Worker's routes for a non-prod stage. With a custom domain,
+ * workers.dev is switched off: the Access application covers only the custom
+ * hostname, so a live workers.dev URL would serve static assets and
+ * /api/health ungated.
+ */
+export const customDomainRoutes = (customDomain: string) =>
+  customDomain ? { domain: [customDomain], url: false } : {};
+
 /** Reads ACCESS_ALLOWED_EMAILS; dies with `remedy` when none are set. */
 export const requireAllowedEmails = (remedy: string) =>
   Effect.gen(function* () {

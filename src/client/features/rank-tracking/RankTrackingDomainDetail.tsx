@@ -21,7 +21,7 @@ import {
 } from "@/client/features/projects/ProjectDataforseoRefusal";
 import { captureClientEvent } from "@/client/lib/posthog";
 import { FreePlanAlert } from "./FreePlanAlert";
-import { ScheduledChecksPausedAlert } from "./ScheduledChecksPausedAlert";
+import { RankTrackingChangesAlert } from "./RankTrackingChangesAlert";
 import { RankRunAlerts } from "./RankRunAlerts";
 import { RankTrackingDetailHeader } from "./RankTrackingDetailHeader";
 import { RankTrackingOverview } from "./RankTrackingOverview";
@@ -241,17 +241,7 @@ export function RankTrackingDomainDetail({
 
   return (
     <div className="space-y-3">
-      <ScheduledChecksPausedAlert />
-
-      {config.lastSkipReason === "insufficient_credits" && (
-        <Alert variant="warning">
-          <AlertTriangle />
-          <AlertDescription className="text-foreground">
-            Last scheduled check was skipped due to insufficient credits. Top up
-            your balance to resume automatic tracking.
-          </AlertDescription>
-        </Alert>
-      )}
+      <RankTrackingChangesAlert />
 
       {/* The project's reason stands in for the last run's own alert, which
           would blame the search data provider for the keywords it skipped. */}

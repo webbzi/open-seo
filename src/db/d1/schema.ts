@@ -15,3 +15,4 @@ export * from "../umami.schema";
 export * from "../telemetry.schema";
 export * from "../ai-visibility.schema";
 export * from "../project-dataforseo.schema";
+export * from "../local-seo.schema";

@@ -36,14 +36,25 @@ vi.mock("@/server/features/rank-tracking/services/rankCheckRunGuards", () => ({
 vi.mock("@/server/workflows/rankCheckPaths", () => ({
   runLiveCheck: mocks.runLiveCheck,
   runQueuedCheck: vi.fn(),
+  retryRankChecks: vi.fn(),
 }));
 vi.mock("@/server/workflows/pgStep", () => ({
-  pgStep: (
+  // Like the engine, run() gets a rebuilt Error, never the thrown object.
+  pgStep: async (
     _step: unknown,
     _name: string,
     _config: unknown,
     fn: () => unknown,
-  ) => fn(),
+  ) => {
+    try {
+      return await fn();
+    } catch (error) {
+      throw new Error(
+        error instanceof Error ? `${error.name}: ${error.message}` : "",
+        { cause: error },
+      );
+    }
+  },
 }));
 vi.mock("@/server/lib/dataforseo", () => ({
   createDataforseoClient: mocks.createDataforseoClient,
@@ -61,6 +72,9 @@ vi.mock(
   "@/server/features/projects/services/projectDataforseoPrecheck",
   () => ({ projectDataforseoRefusal: mocks.projectDataforseoRefusal }),
 );
+vi.mock("@/server/email/onboarding-drip", () => ({
+  sendCreditsExhaustedEvent: vi.fn(),
+}));
 
 const billingCustomer = {
   userId: "user_1",
@@ -118,26 +132,39 @@ describe("rank check workflow credit ceiling", () => {
     mocks.updateRun.mockResolvedValue(undefined);
     mocks.isHostedServerAuthMode.mockResolvedValue(true);
     mocks.autumnCheck.mockResolvedValue({ balance: { remaining: 1_000 } });
-    mocks.runLiveCheck.mockResolvedValue({ queueStats: null, refusal: null });
+    mocks.runLiveCheck.mockResolvedValue(null);
   });
 
   it("rejects a keyword-list race before balance or DataForSEO calls", async () => {
     mocks.getKeywordsForConfig.mockResolvedValue(keywords(5));
 
-    await expect(runWorkflow({ maxCostCredits: 12 })).rejects.toMatchObject({
-      code: "VALIDATION_ERROR",
-    });
+    await expect(runWorkflow({ maxCostCredits: 20 })).rejects.toThrow();
 
     expect(mocks.autumnCheck).not.toHaveBeenCalled();
     expect(mocks.createDataforseoClient).not.toHaveBeenCalled();
     expect(mocks.runLiveCheck).not.toHaveBeenCalled();
   });
 
+  it("keeps a credits refusal as the bare code, so the credits card shows", async () => {
+    mocks.getKeywordsForConfig.mockResolvedValue(keywords(5));
+    mocks.autumnCheck.mockResolvedValue({ balance: { remaining: 0 } });
+
+    await expect(runWorkflow({})).rejects.toThrow("INSUFFICIENT_CREDITS");
+
+    expect(mocks.failRunIfActive).toHaveBeenCalledWith(
+      "run_1",
+      "INSUFFICIENT_CREDITS",
+    );
+    expect(mocks.updateConfig).toHaveBeenCalledWith("config_1", "project_1", {
+      lastSkipReason: "insufficient_credits",
+    });
+  });
+
   // Exactly at the ceiling is approved (the guard is strictly greater), and
   // callers without a ceiling — every scheduled check — must not be treated
   // as approving zero credits.
   it.each([
-    ["at the approved ceiling", 12, 4],
+    ["at the approved ceiling", 20, 4],
     ["without a ceiling", undefined, 5],
   ])("checks the reloaded list %s", async (_label, maxCostCredits, count) => {
     mocks.getKeywordsForConfig.mockResolvedValue(keywords(count));
@@ -168,7 +195,7 @@ describe("rank check finalization", () => {
     mocks.updateRun.mockResolvedValue(undefined);
     mocks.isHostedServerAuthMode.mockResolvedValue(true);
     mocks.autumnCheck.mockResolvedValue({ balance: { remaining: 1_000 } });
-    mocks.runLiveCheck.mockResolvedValue({ queueStats: null, refusal: null });
+    mocks.runLiveCheck.mockResolvedValue(null);
   });
 
   it("fails a run where no keyword produced a snapshot, keeping the recorded reason", async () => {
@@ -214,7 +241,7 @@ describe("rank check project DataForSEO refusals", () => {
     mocks.getSnapshotsForRun.mockResolvedValue([]);
     mocks.isHostedServerAuthMode.mockResolvedValue(false);
     mocks.projectDataforseoRefusal.mockResolvedValue(null);
-    mocks.runLiveCheck.mockResolvedValue({ queueStats: null, refusal: null });
+    mocks.runLiveCheck.mockResolvedValue(null);
   });
 
   it("skips a scheduled run when the project's paid usage is paused, leaving its schedule alone", async () => {
@@ -222,9 +249,9 @@ describe("rank check project DataForSEO refusals", () => {
       new AppError("PROJECT_DATAFORSEO_PAUSED"),
     );
 
-    await expect(runWorkflow({ trigger: "scheduled" })).rejects.toMatchObject({
-      code: "PROJECT_DATAFORSEO_PAUSED",
-    });
+    await expect(runWorkflow({ trigger: "scheduled" })).rejects.toThrow(
+      "PROJECT_DATAFORSEO_PAUSED",
+    );
 
     expect(mocks.projectDataforseoRefusal).toHaveBeenCalledWith(
       "org_1",
@@ -252,10 +279,7 @@ describe("rank check project DataForSEO refusals", () => {
     mocks.getSnapshotsForRun.mockResolvedValue([
       { trackingKeywordId: "kw_0", device: "desktop" },
     ]);
-    mocks.runLiveCheck.mockResolvedValue({
-      queueStats: null,
-      refusal: "PROJECT_BUDGET_EXCEEDED",
-    });
+    mocks.runLiveCheck.mockResolvedValue("PROJECT_BUDGET_EXCEEDED");
 
     await runWorkflow({});
 

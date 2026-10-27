@@ -19,6 +19,7 @@ import * as sqliteUmami from "./umami.schema";
 import * as sqliteTelemetry from "./telemetry.schema";
 import * as sqliteAiVisibility from "./ai-visibility.schema";
 import * as sqliteProjectDataforseo from "./project-dataforseo.schema";
+import * as sqliteLocalSeo from "./local-seo.schema";
 import * as pgApp from "./pg/app.schema";
 import * as pgProjectContext from "./pg/project-context.schema";
 import * as pgReports from "./pg/reports.schema";
@@ -33,6 +34,7 @@ import * as pgUmami from "./pg/umami.schema";
 import * as pgTelemetry from "./pg/telemetry.schema";
 import * as pgAiVisibility from "./pg/ai-visibility.schema";
 import * as pgProjectDataforseo from "./pg/project-dataforseo.schema";
+import * as pgLocalSeo from "./pg/local-seo.schema";
 
 // Guards the ONE structural artifact `db:generate` does not regenerate: the
 // hand-written Postgres schema. The provider-aware `db`/`@/db/schema` barrel
@@ -168,6 +170,7 @@ const sqliteAppTables = tablesFrom(
   sqliteTelemetry,
   sqliteAiVisibility,
   sqliteProjectDataforseo,
+  sqliteLocalSeo,
 );
 const pgAppTables = tablesFrom(
   pgApp,
@@ -183,6 +186,7 @@ const pgAppTables = tablesFrom(
   pgTelemetry,
   pgAiVisibility,
   pgProjectDataforseo,
+  pgLocalSeo,
 );
 const sqliteAuthTables = tablesFrom(sqliteAuth);
 const pgAuthTables = tablesFrom(pgAuth);
