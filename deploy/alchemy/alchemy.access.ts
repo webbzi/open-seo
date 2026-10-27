@@ -42,6 +42,36 @@ export const readWorkersSubdomain = ({ required }: { required: boolean }) =>
     );
   });
 
+/**
+ * Optional CUSTOM_DOMAIN (e.g. `openseo.example.com`): the hostname a
+ * non-prod stage serves the app and its Access gate on instead of
+ * workers.dev. Its zone must be in the deploying account. "" when unset.
+ */
+export const readCustomDomain = (stage: string) =>
+  Effect.gen(function* () {
+    const domain = (yield* Config.string("CUSTOM_DOMAIN").pipe(
+      Config.withDefault(""),
+    ))
+      .trim()
+      .toLowerCase();
+    if (!domain) return domain;
+    if (stage === HOSTED_PROD_STAGE) {
+      return yield* Effect.die(
+        new Error(
+          "CUSTOM_DOMAIN is for self-host and preview stages; hosted-prod's domains are fixed in alchemy.run.ts.",
+        ),
+      );
+    }
+    if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain)) {
+      return yield* Effect.die(
+        new Error(
+          `CUSTOM_DOMAIN must be a bare hostname like openseo.example.com (no https://, path, or wildcard); got "${domain}".`,
+        ),
+      );
+    }
+    return domain;
+  });
+
 /** Reads ACCESS_ALLOWED_EMAILS; dies with `remedy` when none are set. */
 export const requireAllowedEmails = (remedy: string) =>
   Effect.gen(function* () {

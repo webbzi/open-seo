@@ -26,6 +26,8 @@ MCP clients should connect to:
 https://YOUR_WORKER_HOSTNAME/mcp
 ```
 
+`YOUR_WORKER_HOSTNAME` is your `CUSTOM_DOMAIN` if you set one, otherwise the workers.dev hostname. A deploy that changes the Access application's hostname turns `Managed OAuth` off, so turn it back on afterwards.
+
 ## AI visibility tracking
 
 AI Visibility uses your `DATAFORSEO_API_KEY`; tracked questions are sent to DataForSEO and billed directly by the provider. Set `OPENROUTER_API_KEY` for setup research and generated prompt suggestions. Deployment configures background collection and a five-minute cron that dispatches due daily, weekly, or monthly checks. The app shows the collection cost before a check or schedule starts. See the [AI Visibility guide](https://openseo.so/docs/ai-visibility).
