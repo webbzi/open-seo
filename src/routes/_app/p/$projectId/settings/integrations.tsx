@@ -7,6 +7,7 @@ import {
   umamiConnectionOptions,
 } from "@/client/features/integrations/UmamiConnectionCard";
 import { CrawlerAccessSettings } from "@/client/features/settings/CrawlerAccessSettings";
+import { IndexNowSettings } from "@/client/features/settings/IndexNowSettings";
 
 export const Route = createFileRoute(
   "/_app/p/$projectId/settings/integrations",
@@ -44,6 +45,8 @@ function ProjectIntegrationsRoute() {
       <section id="umami" className="scroll-mt-6">
         <UmamiConnectionCard projectId={projectId} />
       </section>
+
+      <IndexNowSettings projectId={projectId} />
 
       <CrawlerAccessSettings projectId={projectId} />
     </div>

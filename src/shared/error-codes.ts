@@ -4,6 +4,8 @@ const ERROR_CODES = [
   "UNAUTHENTICATED",
   "AUTH_CONFIG_MISSING",
   "PAYMENT_REQUIRED",
+  "PAYMENT_METHOD_REQUIRED",
+  "PAYMENT_ACTION_REQUIRED",
   "INSUFFICIENT_CREDITS",
   "PROJECT_BUDGET_EXCEEDED",
   "PROJECT_DATAFORSEO_PAUSED",
@@ -38,6 +40,10 @@ const NON_REPORTABLE_ERROR_CODES = new Set<ErrorCode>([
   "RATE_LIMITED",
   "NOT_FOUND",
   "PAYMENT_REQUIRED",
+  // The customer's own card declined, is missing, or needs their bank's
+  // confirmation; the message tells them what to do.
+  "PAYMENT_METHOD_REQUIRED",
+  "PAYMENT_ACTION_REQUIRED",
   "INSUFFICIENT_CREDITS",
   // A self-hosted project's own spending cap or pause: the owner's setting
   // working as intended.

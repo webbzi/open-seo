@@ -78,10 +78,15 @@ vi.mock("@/server/billing/subscription", async (importOriginal) => {
 vi.mock("@/server/lib/runtime-env", () => ({
   isHostedServerAuthMode: isHostedServerAuthModeMock,
   getRequiredEnvValue: async () => "test-api-key",
+  getOptionalEnvValue: async () => undefined,
 }));
 
 vi.mock("@/server/lib/posthog", () => ({
   captureServerEvent: vi.fn(),
+}));
+
+vi.mock("@/server/email/onboarding-drip", () => ({
+  sendCreditsExhaustedEvent: vi.fn(),
 }));
 
 // Mock every section module the client wraps so meterDataforseoCall's
