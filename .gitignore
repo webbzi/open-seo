@@ -42,8 +42,13 @@ dist-sourcemaps/
 .claude/*
 !.claude/skills/
 !.claude/CLAUDE.md
-!.claude/rules/
 /.reports/
+
+# Fork maintainer records: private, kept only in the main checkout
+/docs/maintainers/NEXT.md
+/docs/maintainers/decisions/
+/docs/maintainers/specs/0016-umami-analytics-integration.md
+/dataforseo-project-budgets.md
 
 # Alchemy local state + bundle artifacts (SaaS deploys)
 .alchemy/

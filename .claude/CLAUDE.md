@@ -2,8 +2,10 @@
 
 ## Layout
 
-- `docs/maintainers/decisions/<date>-<slug>.md`: decision records (context, options, choice); maintainer notes, outside the public docs site. Read the ones that touch an area before changing it.
-- `docs/maintainers/NEXT.md`: the lead's plan and what the owner owes. `.reports/` (gitignored): subagent reports and handover files; scratch, never committed.
+This fork is public. The records below are gitignored and live only in the main checkout, which overrides AGENTS.md's note that `docs/maintainers/` is tracked. A worktree has none of them, so a brief names their main-checkout path. Any new fork-authored plan, decision or spec gets a `.gitignore` entry before it is written.
+
+- `docs/maintainers/decisions/<date>-<slug>.md`: decision records (context, options, choice). Read the ones that touch an area before changing it.
+- `docs/maintainers/NEXT.md`: the lead's plan and what the owner owes. `.reports/`: subagent reports and handover files; scratch.
 - `.claude/rules/<area>.md`: facts that bite in one area; they load when a matching file is read or edited.
 
 ## Commands
