@@ -48,6 +48,14 @@ if (!env.DATAFORSEO_API_KEY) {
     `${em("DATAFORSEO_API_KEY")} is not set in ${envFile} — see docs/DATAFORSEO_API_KEY.md for how to get one.`,
   );
 }
+if (
+  env.CUSTOM_DOMAIN &&
+  !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(env.CUSTOM_DOMAIN)
+) {
+  fail(
+    `${em("CUSTOM_DOMAIN")} must be a bare hostname like ${em("openseo.example.com")} — no https://, path, or wildcard.`,
+  );
+}
 // When both are set, the deploy provisions no Access resources (hand-managed
 // application) and needs neither ACCESS_ALLOWED_EMAILS nor the access:write
 // login scope.

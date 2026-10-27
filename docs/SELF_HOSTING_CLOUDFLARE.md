@@ -84,6 +84,27 @@ Add the teammate to `ACCESS_ALLOWED_EMAILS` in `.env.selfhost` and redeploy. Das
 
 Everyone allowed through Cloudflare Access works in one shared workspace and sees the same projects. Deployments upgraded from older versions (which gave each user a separate workspace) show a one-time dashboard banner — clicking it migrates all previous per-user work into the shared workspace.
 
+## Serving OpenSEO on your own domain
+
+By default OpenSEO runs at `open-seo-selfhost.<your-subdomain>.workers.dev`. To use a hostname such as `openseo.example.com` instead:
+
+1. Check that the domain's zone is in the same Cloudflare account as the Worker, and that no DNS record exists yet for the hostname. Cloudflare creates the record and the certificate itself.
+2. If MCP clients connect through Cloudflare Access, note your application's `Managed OAuth` settings first (see [Operations](./SELF_HOSTING_CLOUDFLARE_OPERATIONS.md#connect-the-mcp-server-through-cloudflare-access)). Moving the Access application to the new hostname turns Managed OAuth off.
+3. Set `CUSTOM_DOMAIN=openseo.example.com` in `.env.selfhost` and redeploy:
+
+   ```bash
+   pnpm deploy:selfhost --yes
+   ```
+
+   The deploy attaches the hostname to the Worker, moves the Access application to it, and switches the workers.dev URL off.
+
+4. Turn `Managed OAuth` back on with the same settings, then point your MCP clients at `https://openseo.example.com/mcp` and sign them in again.
+5. If you connected Google Search Console or Google Analytics, add the new callback URLs (`https://openseo.example.com/api/gsc/oauth/callback`, `https://openseo.example.com/api/ga4/oauth/callback`) to your Google OAuth client.
+
+The zone's own security settings now apply to OpenSEO. Browser Integrity Check and Bot Fight Mode can challenge MCP clients, and Rocket Loader can break the app's scripts. Turn them off for the hostname with a Configuration Rule. Bot Fight Mode can only be turned off zone-wide.
+
+To go back to workers.dev, remove `CUSTOM_DOMAIN`, redeploy, and turn `Managed OAuth` on again.
+
 ## Troubleshooting
 
 - Login fails: re-check `ACCESS_ALLOWED_EMAILS` in `.env.selfhost` and redeploy.
