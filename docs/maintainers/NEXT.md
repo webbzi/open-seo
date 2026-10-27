@@ -4,17 +4,23 @@
 
 ## Now
 
-1. Deploy main (`pnpm deploy:selfhost --yes`; applies D1 migration 0057). This covers per-project DataForSEO budgets (PR #1) and Umami (PR #2).
-2. Budgets: verify attribution on real usage (rows per project, `cost_usd` vs provider, no long-pending rows), then run a cap test on a dev project, then set client limits.
-3. Umami: set `UMAMI_API_URL` + `UMAMI_API_KEY`, redeploy, connect one project, and check `get_umami_overview` against the Umami UI over 28 days.
-4. Serve at `openseo.webbzi.com` (decision `docs/maintainers/decisions/2026-10-27-selfhost-custom-domain.md`): the `CUSTOM_DOMAIN` PR is open from `feat/selfhost-custom-domain`. After it merges and step 1 is done, run that record's rollout as its own deploy.
+Per-project DataForSEO budgets merged to main (PR webbzi/open-seo#1). Rollout, in order:
 
-Follow-ups only on real usage: queued-task refund reconciliation, and a usage counter if a project passes ~100k ledger rows.
+1. Deployed 2026-10-16 from main 32e57d5 (`pnpm deploy:selfhost --yes`; Alchemy applies pending D1 migrations; query `d1_migrations` with `cf d1 query` for state).
+2. Verify attribution on real usage with limits unset: rows per project, `cost_usd` vs provider, no long-pending rows.
+3. Controlled cap test on a dev project, then configure client limits and opening balances.
+4. Follow-ups only on real usage: queued-task refund reconciliation (plan slice 4); a usage counter if a project passes ~100k ledger rows.
+
+Umami per-project source (decision `docs/maintainers/decisions/2026-10-16-umami-integration-shape.md`): merged to main 254febda (PR #2); worktree, branch and test instance cleaned up. Rollout, in order:
+
+1. Deploy main (`pnpm deploy:selfhost --yes`; applies D1 migration 0057). Without the Umami vars the deployment behaves as before.
+2. Set `UMAMI_API_URL` + `UMAMI_API_KEY`, redeploy, connect one project in Settings → Integrations.
+3. Check the dashboard card and `get_umami_overview` against the Umami UI for the same 28 days.
 
 ## Owner
 
-- Review and merge the custom-domain PR. Then follow the rollout in the decision record: a hostname rule turning Browser Integrity Check, Rocket Loader and email obfuscation off; note the Managed OAuth settings; set `CUSTOM_DOMAIN`; deploy; re-enable Managed OAuth; repoint Codex.
-- Go to deploy main (Now 1).
-- Umami: Umami v3.4+, an API key from a least-privileged user, set both vars.
+- Go to deploy main (step 1 above).
+- Umami: run Umami v3.4+, create an API key from a dedicated least-privileged Umami user that owns or manages only the websites to expose, set `UMAMI_API_URL` + `UMAMI_API_KEY` on the deployment.
 - Optional: delete the remote branch `feat/umami-connection`.
-- Hosted, pre-existing, flagged only: `RankCheckWorkflow` prepare-step `INSUFFICIENT_CREDITS` loses its class across the step boundary.
+- Sign in once and open Settings → API spending to confirm the new screens.
+- Hosted, pre-existing, flagged only: `RankCheckWorkflow` prepare-step `INSUFFICIENT_CREDITS` loses its class across the step boundary, so the `insufficient_credits` skip reason likely never records.
